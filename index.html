@@ -667,6 +667,7 @@ async function pollStatus() {
     S.running = status.running;
     S.capital = status.capital;
     S.currentCapital = status.currentCapital;
+    S.pnl = status.pnl;
     S.tradeCount = status.tradeCount;
     S.wins = status.winRate;
     S.remainingMs = status.remainingMs;
@@ -939,7 +940,7 @@ function addLogEntry(type, label, desc, time) {
 }
 
 function updateKpis() {
-  const pnl = S.currentCapital - S.capital;
+  const pnl = S.pnl !== undefined ? S.pnl : S.currentCapital - S.capital;
   const pct = S.capital > 0 ? pnl / S.capital * 100 : 0;
   document.getElementById('kpiCapital').textContent = '$' + S.currentCapital.toFixed(2);
   const el = document.getElementById('kpiPnl');
