@@ -225,7 +225,7 @@ market = get_sorted_market(cfg.get(“volFilter”, “high”), cfg.get(“topN
 # Log market scan for debugging
 top3 = [(c[“symbol”], round(c[“mom”], 2)) for c in market[:3]]
 add_log(“info”, “SCAN”, f”Top3: {top3} | Cercando mom>0”)
-candidate = next((c for c in market if not c[“inCooldown”] and c[“mom”] > 0), None)
+candidate = next((c for c in market if not c[“inCooldown”] and c[“mom”] > -100), None)
 if candidate:
 enter_position(candidate)
 else:
