@@ -677,13 +677,13 @@ async function pollStatus() {
     // Sync position
     if (status.position) {
       S.position = {
-        symbol: status.position.sym,
+        symbol: status.position.symbol,
         icon: status.position.icon,
-        entryPrice: status.position.entry,
-        currentPrice: status.position.cur,
-        highPrice: status.position.high,
+        entryPrice: status.position.entryPrice,
+        currentPrice: status.position.currentPrice,
+        highPrice: status.position.highPrice,
         size: status.position.size,
-        entryTime: status.position.time,
+        entryTime: status.position.entryTime,
       };
     } else {
       S.position = null;
