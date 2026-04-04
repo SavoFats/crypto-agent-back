@@ -764,6 +764,8 @@ async function startAgent() {
       S.running = true;
       S.capital = st.capital;
       S.currentCapital = st.currentCapital;
+      S.pnl = st.pnl;
+      S.pnlHistory = st.pnlHistory || [];
       lastLogCount = 0;
       document.getElementById('stopBtn').disabled = false;
       document.getElementById('statusDot').className = 'status-dot running';
@@ -809,7 +811,7 @@ async function startAgent() {
     }
 
     S.running = true; S.capital = capital; S.currentCapital = capital;
-    S.config = config; lastLogCount = 0;
+    S.pnlHistory = []; S.pnl = 0; S.config = config; lastLogCount = 0;
 
     document.getElementById('stopBtn').disabled = false;
     document.getElementById('statusDot').className = 'status-dot running';
