@@ -248,7 +248,7 @@ def scan_and_trade():
             candidates = [
                 c for c in market
                 if not c["inCooldown"]
-                and c["mom"] > 0.3
+                and c["mom"] > 0.05
                 and c["symbol"] not in open_symbols
             ]
             top3 = [(c["symbol"], round(c["mom"], 2)) for c in market[:3]]
