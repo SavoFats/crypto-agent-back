@@ -343,9 +343,10 @@ P&L sessione: ${pnl:.2f}. Rispondi in italiano, in modo conciso e professionale.
             json={"model": "claude-haiku-4-5-20251001", "max_tokens": 500, "system": system, "messages": messages}
         )
         data = res.json()
+        print(f"Anthropic response: {data}")
         if "content" in data:
             return {"reply": data["content"][0]["text"]}
-        return {"error": "Errore API"}
+        return {"error": f"Errore API: {data.get('error', {}).get('message', str(data))}"}
 
 @app.post("/stop")
 def stop_agent():
