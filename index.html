@@ -668,7 +668,13 @@ function goTo(page) {
   document.getElementById('tab-' + page).classList.add('active');
   curPage = page;
   if (page === 'monitor') setTimeout(drawChart, 50);
-  if (page === 'market') { if (!geckoLoaded) loadGeckoMarket(); else filterMarket(); }
+  if (page === 'market') {
+    if (geckoInterval) clearInterval(geckoInterval);
+    loadGeckoMarket();
+    geckoInterval = setInterval(loadGeckoMarket, 60000);
+  } else {
+    if (geckoInterval) { clearInterval(geckoInterval); geckoInterval = null; }
+  }
   if (page === 'trades') fetchTrades();
   if (page === 'log') { document.getElementById('notif-log').classList.remove('show'); logNotif = 0; }
   if (page === 'chat') { document.getElementById('notif-chat').classList.remove('show'); chatNotif = 0; }
@@ -1123,15 +1129,21 @@ function renderPos(pos) {
 
 let geckoData = [];
 let geckoLoaded = false;
+let geckoLastUpdate = null;
+let geckoInterval = null;
 
 async function loadGeckoMarket() {
   try {
+    document.getElementById('mktBadge').textContent = '...';
     const res = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h');
     geckoData = await res.json();
     geckoLoaded = true;
+    geckoLastUpdate = new Date();
+    const timeStr = geckoLastUpdate.toTimeString().slice(0,5);
+    document.getElementById('mktBadge').textContent = 'agg. ' + timeStr;
     filterMarket();
-    document.getElementById('mktBadge').textContent = 'LIVE';
   } catch(e) {
+    document.getElementById('mktBadge').textContent = 'ERRORE';
     document.getElementById('mktList').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><span>Errore caricamento dati.<br>Riprova tra un momento.</span></div>';
   }
 }
