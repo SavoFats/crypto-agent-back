@@ -1268,30 +1268,18 @@ async function sendMsg() {
   th.innerHTML='<div class="msg-av">⚡</div><div class="thinking"><div class="th-dot"></div><div class="th-dot"></div><div class="th-dot"></div></div>';
   document.getElementById('chatMsgs').appendChild(th); scrollChat();
   try {
-    const pos = S.position;
-    const pnl = S.currentCapital - S.capital;
-    const top3 = (S.market || []).slice(0,3).map(c => `${c.symbol}(${c.mom>=0?'+':''}${c.mom.toFixed(1)}%)`).join(', ');
-    const context = JSON.stringify({
-      backend: 'Railway', prezzi: 'reali Binance',
-      stato: S.running ? 'in esecuzione' : 'fermo',
-      capitale_iniziale: S.capital, capitale_corrente: S.currentCapital,
-      pnl: pnl.toFixed(2),
-      posizione: pos ? { simbolo: pos.symbol, entrata: pos.entryPrice, corrente: pos.currentPrice, highPrice: pos.highPrice } : null,
-      trade: S.tradeCount,
-      top3_momentum: top3,
-      config: { stop: (S.config.trailStop||0)*100+'%', tp: (S.config.takeProfit||0)*100+'%', cd: S.config.cooldown+'h' }
-    });
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514', max_tokens: 1000,
-        system: `Sei CryptoAgent, un agente di trading algoritmico per criptovalute che usa prezzi reali di Binance via WebSocket. Sei integrato in un'app mobile. Rispondi in italiano, in modo conciso e diretto. Spiega le tue decisioni chiaramente, usa emoji per chiarezza visiva su mobile. Quando descrivi numeri usa sempre il simbolo $ o %. Contesto attuale della sessione: ${context}`,
-        messages: [{ role: 'user', content: msg }]
-      })
+    const res = await fetch(API + '/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ messages: [{ role: 'user', content: msg }] })
     });
     const data = await res.json();
     document.getElementById('thinking')?.remove();
-    addChat('agent', data.content?.[0]?.text || 'Errore nella risposta.');
+    if (data.error) {
+      addChat('agent', '❌ ' + data.error);
+    } else {
+      addChat('agent', data.reply);
+    }
   } catch(e) {
     document.getElementById('thinking')?.remove();
     addChat('agent', '❌ Errore di connessione con il server AI. Riprova tra qualche secondo.');
