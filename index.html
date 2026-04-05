@@ -537,11 +537,12 @@
   <div class="page" id="page-market">
     <div class="card">
       <div class="card-hdr">
-        <span class="card-title">Market Scan — Prezzi Reali</span>
+        <span class="card-title">Mercato — Top 100</span>
         <span class="badge" id="mktBadge">LIVE</span>
       </div>
+      <input id="mktSearch" type="text" placeholder="🔍  Cerca coin..." oninput="filterMarket()" style="width:100%;background:#0f1318;border:1px solid #21262d;border-radius:10px;padding:10px 14px;color:#e6edf3;font-size:14px;margin-bottom:12px;outline:none;">
       <div id="mktList">
-        <div class="empty-state"><div class="icon">📡</div><span>Connessione a Binance<br>in corso...</span></div>
+        <div class="empty-state"><div class="icon">📡</div><span>Caricamento top 100...</span></div>
       </div>
     </div>
   </div>
@@ -667,7 +668,7 @@ function goTo(page) {
   document.getElementById('tab-' + page).classList.add('active');
   curPage = page;
   if (page === 'monitor') setTimeout(drawChart, 50);
-  if (page === 'market') renderMarket();
+  if (page === 'market') { if (!geckoLoaded) loadGeckoMarket(); else filterMarket(); }
   if (page === 'trades') fetchTrades();
   if (page === 'log') { document.getElementById('notif-log').classList.remove('show'); logNotif = 0; }
   if (page === 'chat') { document.getElementById('notif-chat').classList.remove('show'); chatNotif = 0; }
@@ -824,6 +825,7 @@ setInterval(() => {
 
 // ===== COIN LOGOS =====
 const COIN_LOGOS = {
+  'XRP': 'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png',
   'BTC': 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
   'ETH': 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
   'SOL': 'https://assets.coingecko.com/coins/images/4128/small/solana.png',
@@ -1119,30 +1121,58 @@ function renderPos(pos) {
   document.getElementById('trailPct').textContent = pct.toFixed(2) + '%';
 }
 
-function renderMarket() {
-  const market = S.market || [];
+let geckoData = [];
+let geckoLoaded = false;
+
+async function loadGeckoMarket() {
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h');
+    geckoData = await res.json();
+    geckoLoaded = true;
+    filterMarket();
+    document.getElementById('mktBadge').textContent = 'LIVE';
+  } catch(e) {
+    document.getElementById('mktList').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><span>Errore caricamento dati.<br>Riprova tra un momento.</span></div>';
+  }
+}
+
+function filterMarket() {
+  const q = (document.getElementById('mktSearch').value || '').toLowerCase();
+  const filtered = geckoData.filter(c =>
+    c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q)
+  );
+  renderMarket(filtered);
+}
+
+function renderMarket(data) {
+  if (!data) data = geckoData;
   const el = document.getElementById('mktList');
-  if (market.length === 0) {
-    el.innerHTML = '<div class="empty-state"><div class="icon">📡</div><span>In attesa di dati Binance...</span></div>';
+  if (!geckoLoaded) { loadGeckoMarket(); return; }
+  if (data.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><span>Nessuna coin trovata</span></div>';
     return;
   }
-  el.innerHTML = market.map((c, i) => {
-    const isTop = S.running && i === 0 && !c.inCooldown;
-    const barW = Math.max(0, Math.min(100, (c.mom + 5) / 10 * 100));
-    return `<div class="mkt-item ${isTop?'top':''}">
-      <span class="mkt-rank">${i+1}</span>
-      <div class="mkt-info">
-        <div class="mkt-sym">${c.symbol}${isTop?'<span class="tag">▶</span>':''}${c.inCooldown?'<span class="cd-tag">CD</span>':''}</div>
-        <div class="mkt-price">$${c.price > 1 ? c.price.toFixed(2) : c.price.toFixed(4)} · 24h: ${c.change24h>=0?'+':''}${c.change24h.toFixed(2)}%</div>
+  el.innerHTML = data.map((c, i) => {
+    const pct = c.price_change_percentage_24h || 0;
+    const isUp = pct >= 0;
+    const price = c.current_price > 1 ? c.current_price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : c.current_price.toFixed(4);
+    const mcap = c.market_cap >= 1e9 ? '$' + (c.market_cap/1e9).toFixed(1) + 'B' : '$' + (c.market_cap/1e6).toFixed(0) + 'M';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:0.5px solid #161b22;">
+      <span style="font-size:12px;color:#484f58;min-width:20px;text-align:right;">${c.market_cap_rank}</span>
+      <img src="${c.image}" style="width:32px;height:32px;border-radius:50%;flex-shrink:0;" onerror="this.style.display='none'">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:600;color:#e6edf3;">${c.symbol.toUpperCase()}</div>
+        <div style="font-size:11px;color:#484f58;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name} · ${mcap}</div>
       </div>
-      <div class="mkt-right">
-        <div class="mkt-change ${c.mom>=0?'up':'down'}">${c.mom>=0?'+':''}${c.mom.toFixed(2)}%</div>
-        <div class="mom-bar"><div class="mom-fill ${c.mom<0?'neg':''}" style="width:${barW}%"></div></div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-size:14px;font-weight:600;color:#e6edf3;">$${price}</div>
+        <div style="font-size:12px;color:${isUp?'#3fb950':'#f85149'};font-weight:500;">${isUp?'+':''}${pct.toFixed(2)}%</div>
       </div>
     </div>`;
   }).join('');
 }
-function renderMarketMini() { if (curPage === 'market') renderMarket(); }
+
+function renderMarketMini() { if (curPage === 'market') filterMarket(); }
 
 function addLogEntry(type, label, desc, time) {
   const el = document.getElementById('logList');
