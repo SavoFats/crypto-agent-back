@@ -52,7 +52,7 @@ agent_state = {
     "running": False,
     "capital": 0.0,
     "currentCapital": 0.0,
-    "position": None,
+    "positions": [],        # lista di posizioni aperte (max 2)
     "pnlHistory": [],
     "sessionStart": None,
     "sessionDuration": 0,
@@ -136,16 +136,21 @@ def add_log(type_, label, desc):
         agent_state["log"].pop()
 
 def unrealized_pnl():
-    pos = agent_state["position"]
-    if not pos:
-        return 0.0
-    return (pos["currentPrice"] - pos["entryPrice"]) / pos["entryPrice"] * pos["size"]
+    total = 0.0
+    for pos in agent_state["positions"]:
+        total += (pos["currentPrice"] - pos["entryPrice"]) / pos["entryPrice"] * pos["size"]
+    return total
 
-def enter_position(crypto):
-    cfg = agent_state["config"]
-    size = agent_state["currentCapital"] * cfg["posSize"]
+def btc_momentum():
+    btc = market_data.get("BTC", {})
+    hist = btc.get("priceHistory", [])
+    if len(hist) >= 5:
+        return btc.get("change1h", 0)
+    return btc.get("change24h", 0) * 0.1
+
+def enter_position(crypto, size):
     agent_state["currentCapital"] -= size
-    agent_state["position"] = {
+    pos = {
         "symbol": crypto["symbol"],
         "icon": crypto["icon"],
         "entryPrice": crypto["price"],
@@ -154,15 +159,18 @@ def enter_position(crypto):
         "size": size,
         "entryTime": datetime.now().isoformat(),
     }
+    agent_state["positions"].append(pos)
     add_log("buy", "ACQUISTO",
         f"{crypto['symbol']} @ ${crypto['price']:.4f} | "
         f"Mom: {crypto['mom']:+.2f}% | 24h: {crypto['change24h']:+.2f}% | "
         f"Size: ${size:.2f}"
     )
 
-def exit_position(reason, cur_price):
-    pos = agent_state["position"]
-    cfg = agent_state["config"]
+def exit_position_by_symbol(symbol, reason):
+    pos = next((p for p in agent_state["positions"] if p["symbol"] == symbol), None)
+    if not pos:
+        return
+    cur_price = pos["currentPrice"]
     pnl = (cur_price - pos["entryPrice"]) / pos["entryPrice"] * pos["size"]
     pct = (cur_price - pos["entryPrice"]) / pos["entryPrice"] * 100
     agent_state["currentCapital"] += pos["size"] + pnl
@@ -174,27 +182,35 @@ def exit_position(reason, cur_price):
         "entryPrice": pos["entryPrice"], "exitPrice": cur_price,
         "pnl": pnl, "pct": pct, "time": datetime.now().isoformat()
     })
-    agent_state["cooldowns"][pos["symbol"]] = (
+    cfg = agent_state["config"]
+    agent_state["cooldowns"][symbol] = (
         datetime.now().timestamp() + cfg["cooldown"] * 3600
     ) * 1000
     add_log("sell", reason,
         f"{pos['symbol']} @ ${cur_price:.4f} | "
         f"{pnl:+.2f}$ ({pct:+.2f}%)"
     )
-    agent_state["position"] = None
+    agent_state["positions"] = [p for p in agent_state["positions"] if p["symbol"] != symbol]
 
-def check_exit():
-    pos = agent_state["position"]
-    if not pos:
-        return
+def check_exits():
     cfg = agent_state["config"]
-    cur = pos["currentPrice"]
-    trail_price = pos["highPrice"] * (1 - cfg["trailStop"])
-    tp_price = pos["entryPrice"] * (1 + cfg["takeProfit"])
-    if cur <= trail_price:
-        exit_position("TRAILING STOP", cur)
-    elif cur >= tp_price:
-        exit_position("TAKE PROFIT", cur)
+    to_exit = []
+    for pos in agent_state["positions"]:
+        cur = pos["currentPrice"]
+        trail_price = pos["highPrice"] * (1 - cfg["trailStop"])
+        tp_price = pos["entryPrice"] * (1 + cfg["takeProfit"])
+        # Check momentum reversal
+        sym_data = market_data.get(pos["symbol"], {})
+        hist = sym_data.get("priceHistory", [])
+        mom = sym_data.get("change1h", 0) if len(hist) >= 5 else sym_data.get("change24h", 0) * 0.1
+        if cur <= trail_price:
+            to_exit.append((pos["symbol"], "TRAILING STOP"))
+        elif cur >= tp_price:
+            to_exit.append((pos["symbol"], "TAKE PROFIT"))
+        elif cfg.get("smartExit", False) and mom < -0.5:
+            to_exit.append((pos["symbol"], "INVERSIONE TREND"))
+    for symbol, reason in to_exit:
+        exit_position_by_symbol(symbol, reason)
 
 def scan_and_trade():
     if not agent_state["running"]:
@@ -203,25 +219,50 @@ def scan_and_trade():
     elapsed_ms = (datetime.now().timestamp() - agent_state["sessionStart"]) * 1000
     if elapsed_ms >= agent_state["sessionDuration"]:
         agent_state["running"] = False
-        if agent_state["position"]:
-            exit_position("SESSIONE SCADUTA", agent_state["position"]["currentPrice"])
+        for pos in list(agent_state["positions"]):
+            exit_position_by_symbol(pos["symbol"], "SESSIONE SCADUTA")
         add_log("info", "FINE SESSIONE", "Durata massima raggiunta.")
         return
-    if agent_state["position"]:
-        check_exit()
-    else:
-        market = get_sorted_market(cfg.get("volFilter", "high"), cfg.get("topN", 10))
-        top3 = [(c["symbol"], round(c["mom"], 2)) for c in market[:3]]
-        add_log("info", "SCAN", f"Top3: {top3} | Cercando mom>0")
-        candidate = next((c for c in market if not c["inCooldown"] and c["mom"] > 0), None)
-        if candidate:
-            enter_position(candidate)
+
+    # Update current prices for all positions
+    for pos in agent_state["positions"]:
+        sym_data = market_data.get(pos["symbol"], {})
+        price = sym_data.get("price", pos["currentPrice"])
+        pos["currentPrice"] = price
+        if price > pos["highPrice"]:
+            pos["highPrice"] = price
+
+    check_exits()
+
+    max_positions = 2
+    open_symbols = {p["symbol"] for p in agent_state["positions"]}
+
+    if len(agent_state["positions"]) < max_positions:
+        # Check BTC not crashing
+        btc_mom = btc_momentum()
+        if btc_mom < -1.5:
+            add_log("info", "PAUSA", f"BTC in calo ({btc_mom:+.2f}%), sospendo ingressi")
         else:
-            add_log("info", "ATTESA", f"Nessuna crypto con momentum positivo trovata")
-    # Calculate P&L AFTER position logic so values are always accurate
+            market = get_sorted_market(cfg.get("volFilter", "high"), cfg.get("topN", 10))
+            slots = max_positions - len(agent_state["positions"])
+            candidates = [
+                c for c in market
+                if not c["inCooldown"]
+                and c["mom"] > 0.3
+                and c["symbol"] not in open_symbols
+            ]
+            top3 = [(c["symbol"], round(c["mom"], 2)) for c in market[:3]]
+            add_log("info", "SCAN", f"Top3: {top3} | BTC: {btc_mom:+.2f}% | Slot: {slots}")
+            for candidate in candidates[:slots]:
+                # Size = currentCapital / remaining slots
+                size = agent_state["currentCapital"] / (slots - candidates.index(candidate))
+                size = min(size, agent_state["currentCapital"])
+                if size > 0:
+                    enter_position(candidate, size)
+
+    # P&L history
     unr = unrealized_pnl()
-    pos = agent_state["position"]
-    pos_value = pos["size"] if pos else 0
+    pos_value = sum(p["size"] for p in agent_state["positions"])
     total_value = agent_state["currentCapital"] + pos_value + unr
     pnl_val = total_value - agent_state["capital"]
     agent_state["pnlHistory"].append({
@@ -246,8 +287,8 @@ async def startup():
 @app.get("/status")
 def get_status():
     unr = unrealized_pnl()
-    pos = agent_state["position"]
-    pos_value = pos["size"] if pos else 0
+    positions = agent_state["positions"]
+    pos_value = sum(p["size"] for p in positions)
     total_value = agent_state["currentCapital"] + pos_value + unr
     pnl = total_value - agent_state["capital"]
     pct = pnl / agent_state["capital"] * 100 if agent_state["capital"] > 0 else 0
@@ -264,7 +305,8 @@ def get_status():
         "pct": pct,
         "tradeCount": agent_state["tradeCount"],
         "winRate": wr,
-        "position": agent_state["position"],
+        "positions": positions,
+        "position": positions[0] if positions else None,  # backward compat
         "remainingMs": remaining,
         "pnlHistory": agent_state["pnlHistory"][-100:],
         "log": agent_state["log"][:30],
@@ -290,7 +332,7 @@ async def start_agent(body: dict):
         "running": True,
         "capital": capital,
         "currentCapital": capital,
-        "position": None,
+        "positions": [],
         "pnlHistory": [{"t": 0, "v": 0}],
         "sessionStart": datetime.now().timestamp(),
         "sessionDuration": int(cfg.get("sessionDuration", 8)) * 3600 * 1000,
@@ -318,10 +360,19 @@ async def start_agent(body: dict):
 
 @app.post("/close_position")
 def close_position():
-    pos = agent_state["position"]
-    if not pos:
+    positions = agent_state["positions"]
+    if not positions:
         return {"error": "No position open"}
-    exit_position("CHIUSURA MANUALE", pos["currentPrice"])
+    for pos in list(positions):
+        exit_position_by_symbol(pos["symbol"], "CHIUSURA MANUALE")
+    return {"ok": True}
+
+@app.post("/close_position/{symbol}")
+def close_position_symbol(symbol: str):
+    pos = next((p for p in agent_state["positions"] if p["symbol"] == symbol), None)
+    if not pos:
+        return {"error": f"No position on {symbol}"}
+    exit_position_by_symbol(symbol, "CHIUSURA MANUALE")
     return {"ok": True}
 
 @app.post("/chat")
@@ -331,10 +382,11 @@ async def chat(body: dict):
     if not api_key:
         return {"error": "API key non configurata"}
     messages = body.get("messages", [])
-    pos = agent_state.get("position")
+    pos = agent_state.get("positions", [])
     pnl = agent_state.get("currentCapital", 0) - agent_state.get("capital", 0)
+    pos_desc = ", ".join([f"{p['symbol']} @ ${p['entryPrice']}" for p in pos]) if pos else "Nessuna"
     system = f"""Sei un agente di trading crypto. Stai monitorando il mercato in tempo reale con prezzi Binance.
-Stato attuale: {'IN POSIZIONE su ' + pos['symbol'] + ' @ $' + str(pos['entryPrice']) if pos else 'Nessuna posizione aperta'}.
+Posizioni aperte: {pos_desc}.
 P&L sessione: ${pnl:.2f}. Rispondi in italiano, in modo conciso e professionale."""
     async with httpx.AsyncClient(timeout=30) as client:
         res = await client.post(
@@ -353,9 +405,8 @@ def stop_agent():
     if not agent_state["running"]:
         return {"error": "Not running"}
     agent_state["running"] = False
-    pos = agent_state["position"]
-    if pos:
-        exit_position("STOP MANUALE", pos["currentPrice"])
+    for pos in list(agent_state["positions"]):
+        exit_position_by_symbol(pos["symbol"], "STOP MANUALE")
     pnl = agent_state["currentCapital"] - agent_state["capital"]
     add_log("info", "STOP", f"P&L finale: {pnl:+.2f}$")
     return {"ok": True, "pnl": pnl}
