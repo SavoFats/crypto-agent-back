@@ -221,6 +221,8 @@ def enter_position(crypto):
         "entryTime": datetime.now().isoformat(),
         "stopDistance": stop_distance_pct,
         "atr": atr,
+        "partialTaken": False,
+        "stopPrice": crypto["price"] * (1 - stop_distance_pct),
     }
     add_log("buy", "ACQUISTO",
         f"{crypto['symbol']} @ ${crypto['price']:.4f} | "
@@ -296,20 +298,47 @@ def scan_and_trade():
         pos = agent_state["position"]
         cur = pos["currentPrice"]
         atr = pos.get("atr")
+
         if atr and atr > 0:
             atr_floor = pos["entryPrice"] * 0.005
             atr = max(atr, atr_floor)
-            trail_price = pos["highPrice"] - (atr * 2.0)
-            tp_price = pos["entryPrice"] + (atr * 4.0)
+
+            if not pos.get("partialTaken"):
+                # Phase 1: TP parziale a 1.5x ATR
+                tp_partial = pos["entryPrice"] + (atr * 1.5)
+                stop_price = pos.get("stopPrice", pos["highPrice"] - (atr * 2.0))
+
+                if cur >= tp_partial:
+                    # Chiudi 50%, sposta stop a breakeven
+                    half_size = pos["size"] / 2
+                    pnl_partial = (cur - pos["entryPrice"]) / pos["entryPrice"] * half_size
+                    agent_state["currentCapital"] += half_size + pnl_partial
+                    pos["size"] = half_size
+                    pos["partialTaken"] = True
+                    pos["stopPrice"] = pos["entryPrice"]  # breakeven
+                    add_log("sell", "TP PARZIALE",
+                        f"{pos['symbol']} @ ${cur:.4f} | 50% chiuso | +${pnl_partial:.2f} | Stop → breakeven"
+                    )
+                elif cur <= stop_price:
+                    exit_position("TRAILING STOP", cur)
+            else:
+                # Phase 2: trailing sul 50% rimanente, stop a breakeven
+                trail_price = max(pos["entryPrice"], pos["highPrice"] - (atr * 2.0))
+                tp_full = pos["entryPrice"] + (atr * 4.0)
+
+                if cur <= trail_price:
+                    exit_position("TRAILING STOP", cur)
+                elif cur >= tp_full:
+                    exit_position("TAKE PROFIT FINALE", cur)
         else:
             trail_price = pos["highPrice"] * (1 - cfg.get("trailStop", 0.08))
             tp_price = pos["entryPrice"] * (1 + cfg.get("takeProfit", 0.15))
+            if cur <= trail_price:
+                exit_position("TRAILING STOP", cur)
+            elif cur >= tp_price:
+                exit_position("TAKE PROFIT", cur)
 
-        if cur <= trail_price:
-            exit_position("TRAILING STOP", cur)
-        elif cur >= tp_price:
-            exit_position("TAKE PROFIT", cur)
-        elif cfg.get("smartExit", False):
+        if cfg.get("smartExit", False) and not pos.get("partialTaken"):
             sym_data = market_data.get(pos["symbol"], {})
             hist = sym_data.get("priceHistory", [])
             mom = sym_data.get("change1h", 0) if len(hist) >= 5 else sym_data.get("change24h", 0) * 0.1
