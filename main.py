@@ -172,6 +172,7 @@ def volume_ok(symbol):
     return current_vol >= avg_vol * 1.0  # slightly relaxed: 1.0x instead of 1.2x initially
 
 
+def add_log(type_, label, desc):
     agent_state["log"].insert(0, {"type": type_, "label": label, "desc": desc, "time": datetime.now().strftime("%H:%M:%S")})
     if len(agent_state["log"]) > 100:
         agent_state["log"].pop()
