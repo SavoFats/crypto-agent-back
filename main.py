@@ -53,7 +53,8 @@ for pair, meta in SYM_META.items():
     market_data[meta["symbol"]] = {
         "price": 0.0, "change24h": 0.0, "change1h": 0.0,
         "priceHistory": [], "volumeHistory": [],
-        "volume24h": 0.0, "vol": meta["vol"], "icon": meta["icon"]
+        "volume24h": 0.0, "vol": meta["vol"], "icon": meta["icon"],
+        "consecutiveUps": 0,  # counter for speculative mode
     }
 
 async def fetch_atr_1h(symbol_usdt: str, periods: int = 14) -> float | None:
@@ -104,6 +105,12 @@ async def fetch_binance_prices():
                 market_data[sym]["price"] = price
                 market_data[sym]["change24h"] = change24h
                 market_data[sym]["change1h"] = change1h
+                # Track consecutive up ticks for speculative mode
+                if len(hist) >= 2:
+                    if price > hist[-2]:
+                        market_data[sym]["consecutiveUps"] = market_data[sym].get("consecutiveUps", 0) + 1
+                    else:
+                        market_data[sym]["consecutiveUps"] = 0
                 # Track volume
                 vol = float(t.get("quoteVolume", 0))
                 market_data[sym]["volume24h"] = vol
@@ -207,6 +214,37 @@ def unrealized_pnl():
     if not pos:
         return 0.0
     return (pos["currentPrice"] - pos["entryPrice"]) / pos["entryPrice"] * pos["size"]
+
+async def enter_position_spec(crypto):
+    """Speculative mode entry — fast pump catching with tight trailing stop."""
+    cfg = agent_state["config"]
+    capital = agent_state["capital"]
+    risk_pct = cfg.get("riskPerTrade", 0.02)
+    risk_amount = capital * risk_pct
+    price = crypto["price"]
+
+    # Tight stop: 1% trailing
+    stop_distance_pct = 0.01
+    size = risk_amount / stop_distance_pct
+    size = min(size, agent_state["currentCapital"] * 0.20)
+    size = max(size, 1.0)
+
+    agent_state["currentCapital"] -= size
+    agent_state["position"] = {
+        "symbol": crypto["symbol"], "icon": crypto["icon"],
+        "entryPrice": price, "currentPrice": price,
+        "highPrice": price, "size": size,
+        "entryTime": datetime.now().isoformat(),
+        "stopDistance": stop_distance_pct,
+        "atr": None,
+        "partialTaken": False,
+        "stopPrice": price * 0.99,
+        "specMode": True,
+    }
+    add_log("buy", "PUMP ENTRY",
+        f"{crypto['symbol']} @ ${price:.4f} | "
+        f"Mom: {crypto['mom']:+.2f}% | Size: ${size:.2f} | Trail: 1%"
+    )
 
 async def enter_position_async(crypto):
     """Async version of enter_position that fetches real 1h ATR."""
@@ -350,58 +388,99 @@ async def scan_and_trade():
     if agent_state["position"]:
         pos = agent_state["position"]
         cur = pos["currentPrice"]
-        atr = pos.get("atr")
 
-        if atr and atr > 0:
-            atr_floor = pos["entryPrice"] * 0.005
-            atr = max(atr, atr_floor)
-
-            if not pos.get("partialTaken"):
-                # Phase 1: TP parziale a 1.5x ATR
-                tp_partial = pos["entryPrice"] + (atr * 1.5)
-                stop_price = pos.get("stopPrice", pos["highPrice"] - (atr * 2.0))
-
-                if cur >= tp_partial:
-                    # Chiudi 50%, sposta stop a breakeven
-                    half_size = pos["size"] / 2
-                    pnl_partial = (cur - pos["entryPrice"]) / pos["entryPrice"] * half_size
-                    agent_state["currentCapital"] += half_size + pnl_partial
-                    pos["size"] = half_size
-                    pos["partialTaken"] = True
-                    pos["stopPrice"] = pos["entryPrice"]  # breakeven
-                    add_log("sell", "TP PARZIALE",
-                        f"{pos['symbol']} @ ${cur:.4f} | 50% chiuso | +${pnl_partial:.2f} | Stop → breakeven"
-                    )
-                elif cur <= stop_price:
-                    exit_position("TRAILING STOP", cur)
+        # Speculative mode: tight 1% trailing stop
+        if pos.get("specMode"):
+            trail_price = pos["highPrice"] * 0.99
+            if cur <= trail_price:
+                exit_position("TRAILING STOP 1%", cur)
+            elif agent_state["position"]:
+                entry_time = datetime.fromisoformat(pos["entryTime"])
+                elapsed_min = (datetime.now() - entry_time).total_seconds() / 60
+                if elapsed_min >= 15:
+                    exit_position("TIME STOP", cur)
+        else:
+            atr = pos.get("atr")
+            if atr and atr > 0:
+                atr_floor = pos["entryPrice"] * 0.005
+                atr = max(atr, atr_floor)
+                if not pos.get("partialTaken"):
+                    tp_partial = pos["entryPrice"] + (atr * 1.5)
+                    stop_price = pos.get("stopPrice", pos["highPrice"] - (atr * 2.0))
+                    if cur >= tp_partial:
+                        half_size = pos["size"] / 2
+                        pnl_partial = (cur - pos["entryPrice"]) / pos["entryPrice"] * half_size
+                        agent_state["currentCapital"] += half_size + pnl_partial
+                        pos["size"] = half_size
+                        pos["partialTaken"] = True
+                        pos["stopPrice"] = pos["entryPrice"]
+                        add_log("sell", "TP PARZIALE",
+                            f"{pos['symbol']} @ ${cur:.4f} | 50% chiuso | +${pnl_partial:.2f} | Stop → breakeven"
+                        )
+                    elif cur <= stop_price:
+                        exit_position("TRAILING STOP", cur)
+                else:
+                    trail_price = max(pos["entryPrice"], pos["highPrice"] - (atr * 2.0))
+                    tp_full = pos["entryPrice"] + (atr * 4.0)
+                    if cur <= trail_price:
+                        exit_position("TRAILING STOP", cur)
+                    elif cur >= tp_full:
+                        exit_position("TAKE PROFIT FINALE", cur)
             else:
-                # Phase 2: trailing sul 50% rimanente, stop a breakeven
-                trail_price = max(pos["entryPrice"], pos["highPrice"] - (atr * 2.0))
-                tp_full = pos["entryPrice"] + (atr * 4.0)
-
+                trail_price = pos["highPrice"] * (1 - cfg.get("trailStop", 0.08))
+                tp_price = pos["entryPrice"] * (1 + cfg.get("takeProfit", 0.15))
                 if cur <= trail_price:
                     exit_position("TRAILING STOP", cur)
-                elif cur >= tp_full:
-                    exit_position("TAKE PROFIT FINALE", cur)
-        else:
-            trail_price = pos["highPrice"] * (1 - cfg.get("trailStop", 0.08))
-            tp_price = pos["entryPrice"] * (1 + cfg.get("takeProfit", 0.15))
-            if cur <= trail_price:
-                exit_position("TRAILING STOP", cur)
-            elif cur >= tp_price:
-                exit_position("TAKE PROFIT", cur)
-
-        if cfg.get("smartExit", False) and not pos.get("partialTaken"):
-            sym_data = market_data.get(pos["symbol"], {})
-            hist = sym_data.get("priceHistory", [])
-            mom = sym_data.get("change1h", 0) if len(hist) >= 5 else sym_data.get("change24h", 0) * 0.1
-            if mom < -0.5:
-                exit_position("INVERSIONE TREND", cur)
+                elif cur >= tp_price:
+                    exit_position("TAKE PROFIT", cur)
+            if cfg.get("smartExit", False) and not pos.get("partialTaken"):
+                sym_data = market_data.get(pos["symbol"], {})
+                hist = sym_data.get("priceHistory", [])
+                mom = sym_data.get("change1h", 0) if len(hist) >= 5 else sym_data.get("change24h", 0) * 0.1
+                if mom < -0.5:
+                    exit_position("INVERSIONE TREND", cur)
     else:
         btc = market_data.get("BTC", {})
         btc_hist = btc.get("priceHistory", [])
         btc_mom = btc.get("change1h", 0) if len(btc_hist) >= 5 else btc.get("change24h", 0) * 0.1
-        if btc_mom < -1.5:
+
+        if cfg.get("specMode", False):
+            # SPECULATIVE MODE: hunt aggressive pumps only
+            market = get_sorted_market(cfg.get("volFilter", "high"), cfg.get("topN", 10))
+            candidates = []
+            for c in market:
+                if c["inCooldown"]:
+                    continue
+                sym_data = market_data.get(c["symbol"], {})
+                hist = sym_data.get("priceHistory", [])
+                consecutive_ups = sym_data.get("consecutiveUps", 0)
+                vh = sym_data.get("volumeHistory", [])
+                vol = sym_data.get("volume24h", 0)
+                avg_vol = sum(vh[-10:]) / len(vh[-10:]) if len(vh) >= 5 else 0
+
+                # Check acceleration: last 3 ticks each bigger than previous
+                accelerating = False
+                if len(hist) >= 4:
+                    diffs = [hist[-i] - hist[-i-1] for i in range(1, 4)]
+                    accelerating = all(d > 0 for d in diffs) and diffs[0] >= diffs[1]
+
+                vol_spike = vol >= avg_vol * 5.0 if avg_vol > 0 else False
+
+                # Strong filters: mom > 1.5%, 4+ consecutive ups, acceleration, volume 5x
+                if (c["mom"] > 1.5
+                        and consecutive_ups >= 4
+                        and accelerating
+                        and vol_spike):
+                    candidates.append((c, c["mom"]))
+
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            top3 = [(c["symbol"], round(c["mom"], 2)) for c in market[:3]]
+            add_log("info", "PUMP SCAN",
+                f"Top3: {top3} | Pump: {len(candidates)}"
+            )
+            if candidates:
+                await enter_position_spec(candidates[0][0])
+        elif btc_mom < -1.5:
             add_log("info", "PAUSA", f"BTC in calo ({btc_mom:+.2f}%), sospendo ingressi")
         else:
             market = get_sorted_market(cfg.get("volFilter", "high"), cfg.get("topN", 10))
@@ -413,15 +492,14 @@ async def scan_and_trade():
                     continue
                 adx = calc_adx(c["symbol"])
                 if adx < 20:
-                    continue  # mercato laterale
+                    continue
                 if not ema_aligned(c["symbol"]):
-                    continue  # EMA bearish
+                    continue
                 if not volume_ok(c["symbol"]):
-                    continue  # volume insufficiente
+                    continue
                 candidates.append((c, adx))
 
-            candidates.sort(key=lambda x: x[1], reverse=True)  # ordina per ADX decrescente
-            top3 = [(c["symbol"], round(c["mom"], 2)) for c in market[:3]]
+            candidates.sort(key=lambda x: x[1], reverse=True)
             add_log("info", "SCAN",
                 f"Top3: {top3} | BTC: {btc_mom:+.2f}% | "
                 f"Candidati validi: {len(candidates)}"
@@ -511,6 +589,7 @@ async def start_agent(body: dict):
             "sessionDuration": int(cfg.get("sessionDuration", 8)),
             "smartExit": bool(cfg.get("smartExit", False)),
             "riskPerTrade": float(cfg.get("riskPerTrade", 0.02)),
+            "specMode": bool(cfg.get("specMode", False)),
         },
         "cooldowns": {}, "tradeCount": 0, "wins": 0, "trades": [], "log": [],
         "consecutiveLosses": 0, "circuitBreakerUntil": None, "circuitBreakerTripped": False,
