@@ -234,6 +234,18 @@ def exit_position(reason, cur_price):
     cfg = agent_state["config"]
     pnl = (cur_price - pos["entryPrice"]) / pos["entryPrice"] * pos["size"]
     pct = (cur_price - pos["entryPrice"]) / pos["entryPrice"] * 100
+
+    # Calculate trade duration
+    entry_time = datetime.fromisoformat(pos["entryTime"])
+    duration_min = (datetime.now() - entry_time).total_seconds() / 60
+
+    # Max profit reached during trade
+    max_profit = (pos["highPrice"] - pos["entryPrice"]) / pos["entryPrice"] * pos["size"]
+    max_profit_pct = (pos["highPrice"] - pos["entryPrice"]) / pos["entryPrice"] * 100
+
+    # Was partial TP taken?
+    partial = pos.get("partialTaken", False)
+
     agent_state["currentCapital"] += pos["size"] + pnl
     agent_state["tradeCount"] += 1
 
@@ -242,19 +254,33 @@ def exit_position(reason, cur_price):
         agent_state["consecutiveLosses"] = 0
     else:
         agent_state["consecutiveLosses"] += 1
-        # Circuit breaker: 3 consecutive losses → pause 2h
         if agent_state["consecutiveLosses"] >= 3:
             pause_until = datetime.now().timestamp() * 1000 + 2 * 3600 * 1000
             agent_state["circuitBreakerUntil"] = pause_until
             add_log("info", "CIRCUIT BREAKER", "3 perdite consecutive — pausa 2h per rivalutare condizioni")
 
     agent_state["trades"].append({
-        "symbol": pos["symbol"], "reason": reason,
-        "entryPrice": pos["entryPrice"], "exitPrice": cur_price,
-        "pnl": pnl, "pct": pct, "time": datetime.now().isoformat()
+        "symbol": pos["symbol"],
+        "reason": reason,
+        "entryPrice": pos["entryPrice"],
+        "exitPrice": cur_price,
+        "pnl": pnl,
+        "pct": pct,
+        "time": datetime.now().isoformat(),
+        "entryTime": pos["entryTime"],
+        "durationMin": round(duration_min, 1),
+        "maxProfit": round(max_profit, 4),
+        "maxProfitPct": round(max_profit_pct, 3),
+        "partialTaken": partial,
+        "atr": pos.get("atr"),
+        "size": pos["size"],
     })
     agent_state["cooldowns"][pos["symbol"]] = (datetime.now().timestamp() + cfg.get("cooldown", 2) * 3600) * 1000
-    add_log("sell", reason, f"{pos['symbol']} @ ${cur_price:.4f} | {pnl:+.2f}$ ({pct:+.2f}%)")
+    partial_str = " | TP parziale ✓" if partial else ""
+    add_log("sell", reason,
+        f"{pos['symbol']} @ ${cur_price:.4f} | {pnl:+.2f}$ ({pct:+.2f}%) | "
+        f"{duration_min:.0f} min{partial_str}"
+    )
     agent_state["position"] = None
 
 def scan_and_trade():
