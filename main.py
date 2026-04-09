@@ -265,7 +265,8 @@ async def background_loop():
         try:
             await fetch_prices()
             await scan_and_trade()
-            _update_pnl()
+            if agent_state["running"]:
+                _update_pnl()
         except Exception as e:
             import traceback
             print(f"Loop error: {e}\n{traceback.format_exc()}")
