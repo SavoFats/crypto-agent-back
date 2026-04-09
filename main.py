@@ -13,7 +13,7 @@ BINANCE_BASE = "https://api.binance.com"
 
 # universe dinamico — popolato da fetch_prices()
 # filtro: coppie USDT con volume 24h > MIN_VOLUME_USDT
-MIN_VOLUME_USDT = 200_000_000  # $200M
+MIN_VOLUME_USDT = 50_000_000   # $50M
 
 market_data = {}  # sym -> {price, change1h, change24h, priceHistory, icon}
 
