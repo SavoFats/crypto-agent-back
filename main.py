@@ -205,9 +205,31 @@ async def scan_and_trade():
         add_log("info", "FINE SESSIONE", "Durata massima raggiunta.")
         return
 
-    # check exits
+    # trailing stop dinamico + check exits
     for pos in list(agent_state["positions"]):
         cur = pos["currentPrice"]
+        entry = pos["entryPrice"]
+        profit_pct = (cur - entry) / entry * 100
+
+        # aggiorna highPrice
+        if cur > pos.get("highPrice", cur):
+            pos["highPrice"] = cur
+        high = pos["highPrice"]
+
+        # trailing stop dinamico - lo stop sale mai scende
+        if profit_pct >= 5.0:
+            new_stop = high * 0.99
+        elif profit_pct >= 3.0:
+            new_stop = high * 0.985
+        elif profit_pct >= 1.5:
+            new_stop = entry
+        else:
+            new_stop = pos["stopPrice"]
+
+        if new_stop > pos["stopPrice"]:
+            pos["stopPrice"] = new_stop
+
+        # check uscita
         if cur <= pos["stopPrice"]:
             exit_position(pos, "STOP LOSS")
         elif cur >= pos["tpPrice"]:
