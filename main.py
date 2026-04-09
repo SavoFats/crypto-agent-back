@@ -150,12 +150,11 @@ async def enter_position(sym_data: dict):
         "size": size,
         "entryTime": datetime.now().isoformat(),
         "stopPrice": price * (1 - sl_pct),
-        "tpPrice": price * (1 + tp_pct),
     }
     agent_state["positions"].append(pos)
     add_log("buy", "ACQUISTO",
         f"{sym} @ ${price:.4f} | Size: ${size:.0f} | "
-        f"SL: {sl_pct*100:.1f}% | TP: {tp_pct*100:.1f}%"
+        f"SL: {sl_pct*100:.1f}% | Trailing ON"
     )
 
 def exit_position(pos: dict, reason: str):
@@ -232,8 +231,6 @@ async def scan_and_trade():
         # check uscita
         if cur <= pos["stopPrice"]:
             exit_position(pos, "STOP LOSS")
-        elif cur >= pos["tpPrice"]:
-            exit_position(pos, "TAKE PROFIT")
 
     # how many more positions can we open?
     alloc_pct   = cfg.get("allocPct", 0.20)
@@ -363,9 +360,9 @@ async def start_agent(body: dict):
     })
     alloc = float(cfg.get("allocPct", 0.20)) * 100
     sl    = float(cfg.get("stopLoss", 0.03)) * 100
-    tp    = float(cfg.get("takeProfit", 0.06)) * 100
+
     add_log("info", "AVVIO",
-        f"${capital:.0f} | Alloc: {alloc:.0f}% | SL: {sl:.1f}% | TP: {tp:.1f}%"
+        f"${capital:.0f} | Alloc: {alloc:.0f}% | SL: {sl:.1f}% | Trailing ON"
     )
     return {"ok": True}
 
