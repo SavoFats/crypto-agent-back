@@ -237,14 +237,7 @@ select { appearance:none; }
           <span class="range-val" id="slVal">3%</span>
         </div>
       </div>
-      <div class="field">
-        <label>Take Profit (%)</label>
-        <div class="range-row">
-          <input type="range" id="takeProfit" min="1" max="30" value="6" step="0.5"
-            oninput="document.getElementById('tpVal').textContent=this.value+'%'">
-          <span class="range-val" id="tpVal">6%</span>
-        </div>
-      </div>
+
       <div class="field">
         <label>Variazione 24h minima (%)</label>
         <div class="range-row">
@@ -413,7 +406,6 @@ async function startAgent() {
     capital:         parseFloat(document.getElementById('capital').value),
     allocPct:        parseInt(document.getElementById('allocPct').value) / 100,
     stopLoss:        parseFloat(document.getElementById('stopLoss').value) / 100,
-    takeProfit:      parseFloat(document.getElementById('takeProfit').value) / 100,
     minMomentum:     parseFloat(document.getElementById('minMomentum').value),
     cooldown:        parseFloat(document.getElementById('cooldown').value),
     sessionDuration: parseInt(document.getElementById('sessionDuration').value),
@@ -538,8 +530,9 @@ function renderPositions() {
     const isPos = pnl >= 0;
     const color = isPos ? 'var(--accent)' : 'var(--red)';
     const entryTime = new Date(pos.entryTime).toTimeString().slice(0,5);
-    // progress between SL and TP
-    const range = pos.tpPrice - pos.stopPrice;
+    // progress tra SL e highPrice (massimo raggiunto)
+    const high = pos.highPrice || pos.currentPrice;
+    const range = high - pos.stopPrice;
     const progress = range > 0 ? Math.max(0, Math.min(100, (pos.currentPrice - pos.stopPrice) / range * 100)) : 50;
     const progressColor = progress > 60 ? 'var(--accent)' : progress > 30 ? '#ffaa00' : 'var(--red)';
     return `
@@ -561,11 +554,11 @@ function renderPositions() {
         <div class="pos-cell"><div class="pos-cell-lbl">Entrata</div><div class="pos-cell-val">$${pos.entryPrice.toFixed(4)}</div></div>
         <div class="pos-cell"><div class="pos-cell-lbl">Corrente</div><div class="pos-cell-val">$${pos.currentPrice.toFixed(4)}</div></div>
         <div class="pos-cell"><div class="pos-cell-lbl">Stop Loss</div><div class="pos-cell-val" style="color:var(--red)">$${pos.stopPrice.toFixed(4)}</div></div>
-        <div class="pos-cell"><div class="pos-cell-lbl">Take Profit</div><div class="pos-cell-val" style="color:var(--accent)">$${pos.tpPrice.toFixed(4)}</div></div>
+        <div class="pos-cell"><div class="pos-cell-lbl">Massimo</div><div class="pos-cell-val" style="color:var(--accent)">$${(pos.highPrice||pos.currentPrice).toFixed(4)}</div></div>
       </div>
       <div class="pos-progress">
         <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:6px;">
-          <span>SL</span><span>${pct.toFixed(2)}%</span><span>TP</span>
+          <span>SL</span><span>${pct.toFixed(2)}%</span><span>MAX</span>
         </div>
         <div class="progress-bar"><div class="progress-fill" style="width:${progress}%;background:${progressColor}"></div></div>
       </div>
