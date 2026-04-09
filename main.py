@@ -228,7 +228,7 @@ async def scan_and_trade():
     prices_ok = [sym for sym, d in market_data.items() if d["price"] > 0]
     ranked = sorted(
         [
-            d for sym, d in market_data.items()
+            {**d, "symbol": sym} for sym, d in market_data.items()
             if d["price"] > 0
             and sym not in open_syms
             and (agent_state["cooldowns"].get(sym, 0) < datetime.now().timestamp() * 1000)
