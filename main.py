@@ -466,8 +466,8 @@ async def scan_and_trade():
 
                 vol_spike = vol >= avg_vol * 3.0 if avg_vol > 0 else False
 
-                # Filters: mom > 0.15%, 2+ consecutive ups
-                if (c["mom"] > 0.15 and consecutive_ups >= 2):
+                # Entry: strong momentum (>0.2%) OR moderate momentum with 2+ consecutive ups
+                if (c["mom"] > 0.2) or (c["mom"] > 0.1 and consecutive_ups >= 2):
                     candidates.append((c, c["mom"]))
 
             candidates.sort(key=lambda x: x[1], reverse=True)
