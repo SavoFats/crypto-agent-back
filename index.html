@@ -185,6 +185,14 @@ select { appearance:none; }
 .mkt-filter-btn { font-size:12px; font-family:var(--mono); padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--card2); color:var(--text2); cursor:pointer; }
 .mkt-filter-btn.active { border-color:var(--text); color:var(--text); }
 
+/* MODE SWITCH */
+.mode-switch-container { margin: 16px 0 8px; }
+.mode-switch-label { font-size:11px; color:var(--text2); margin-bottom:8px; font-family:var(--mono); }
+.mode-switch-row { display:flex; gap:8px; margin-bottom:6px; }
+.mode-btn { flex:1; padding:10px; border-radius:8px; border:2px solid var(--border); background:var(--card2); color:var(--text2); font-size:13px; font-weight:600; cursor:pointer; transition:all 0.2s; }
+.mode-btn.active.sim { border-color:var(--text2); color:var(--text); background:var(--card); }
+.mode-btn.active.real { border-color:#ff4444; color:#ff4444; background:rgba(255,68,68,0.1); }
+
 /* SESSION BANNER */
 .sess-banner {
   background:var(--accent-dim); border:1px solid var(--accent);
@@ -279,6 +287,16 @@ select { appearance:none; }
           <span class="range-val" id="cdVal">1h</span>
         </div>
       </div>
+    </div>
+
+    <!-- switch modalità -->
+    <div class="mode-switch-container">
+      <div class="mode-switch-label">Modalità</div>
+      <div class="mode-switch-row">
+        <button class="mode-btn active" id="modeSimBtn" onclick="setMode(false)">⚪ Simulazione</button>
+        <button class="mode-btn" id="modeRealBtn" onclick="setMode(true)">🔴 Reale</button>
+      </div>
+      <div class="field-hint" id="modeHint">Nessun ordine reale verrà eseguito</div>
     </div>
 
     <button class="start-btn" id="startBtn" onclick="startAgent()">▶ Avvia</button>
@@ -441,6 +459,30 @@ function updateAlloc() {
 }
 
 // ── start / stop / reset ──────────────────────────────────────────────────────
+let _realMode = false;
+function setMode(real) {
+  _realMode = real;
+  window._realMode = real;
+  const simBtn = document.getElementById('modeSimBtn');
+  const realBtn = document.getElementById('modeRealBtn');
+  const hint = document.getElementById('modeHint');
+  if (real) {
+    simBtn.classList.remove('active');
+    simBtn.classList.remove('sim');
+    realBtn.classList.add('active');
+    realBtn.classList.add('real');
+    hint.textContent = '⚠️ Gli ordini verranno eseguiti su Coinbase con soldi reali';
+    hint.style.color = '#ff4444';
+  } else {
+    realBtn.classList.remove('active');
+    realBtn.classList.remove('real');
+    simBtn.classList.add('active');
+    simBtn.classList.add('sim');
+    hint.textContent = 'Nessun ordine reale verrà eseguito';
+    hint.style.color = '';
+  }
+}
+
 async function startAgent() {
   const cfg = {
     capital:         parseFloat(document.getElementById('capital').value),
@@ -448,9 +490,20 @@ async function startAgent() {
     stopLoss:        parseFloat(document.getElementById('stopLoss').value) / 100,
     minMomentum:     parseFloat(document.getElementById('minMomentum').value),
     minVolume:       parseFloat(document.getElementById('minVolume').value) * 1_000_000,
+    realMode:        window._realMode || false,
     cooldown:        parseFloat(document.getElementById('cooldown').value),
     sessionDuration: parseInt(document.getElementById('sessionDuration').value),
   };
+  // conferma se modalità reale
+  if (cfg.realMode) {
+    const ok = confirm('⚠️ Stai per avviare l'agente in modalità REALE.
+
+Gli ordini verranno eseguiti su Coinbase con soldi veri.
+
+Confermi?');
+    if (!ok) return;
+  }
+
   try {
     const r = await fetch(API + '/start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({config:cfg}) });
     const d = await r.json();
