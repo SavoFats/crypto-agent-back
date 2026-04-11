@@ -460,26 +460,47 @@ function updateAlloc() {
 
 // ── start / stop / reset ──────────────────────────────────────────────────────
 let _realMode = false;
-function setMode(real) {
+async function setMode(real) {
   _realMode = real;
   window._realMode = real;
   const simBtn = document.getElementById('modeSimBtn');
   const realBtn = document.getElementById('modeRealBtn');
   const hint = document.getElementById('modeHint');
+  const capitalInput = document.getElementById('capital');
+
   if (real) {
-    simBtn.classList.remove('active');
-    simBtn.classList.remove('sim');
-    realBtn.classList.add('active');
-    realBtn.classList.add('real');
-    hint.textContent = '⚠️ Gli ordini verranno eseguiti su Coinbase con soldi reali';
-    hint.style.color = '#ff4444';
+    simBtn.classList.remove('active', 'sim');
+    realBtn.classList.add('active', 'real');
+    hint.textContent = '⏳ Recupero saldo Coinbase...';
+    hint.style.color = '#ffaa00';
+    capitalInput.disabled = true;
+
+    try {
+      const r = await fetch(API + '/test_coinbase');
+      const d = await r.json();
+      if (d.ok) {
+        const usdc = d.balances.find(b => b.currency === 'USDC');
+        const usdcBalance = usdc ? parseFloat(usdc.available) : 0;
+        capitalInput.value = usdcBalance.toFixed(2);
+        hint.textContent = ;
+        hint.style.color = '#ff4444';
+      } else {
+        hint.textContent = '❌ Errore connessione Coinbase: ' + (d.error || 'sconosciuto');
+        hint.style.color = '#ff4444';
+        capitalInput.disabled = false;
+      }
+    } catch(e) {
+      hint.textContent = '❌ Errore: ' + e.message;
+      hint.style.color = '#ff4444';
+      capitalInput.disabled = false;
+    }
   } else {
-    realBtn.classList.remove('active');
-    realBtn.classList.remove('real');
-    simBtn.classList.add('active');
-    simBtn.classList.add('sim');
+    realBtn.classList.remove('active', 'real');
+    simBtn.classList.add('active', 'sim');
     hint.textContent = 'Nessun ordine reale verrà eseguito';
     hint.style.color = '';
+    capitalInput.disabled = false;
+    capitalInput.value = 1000;
   }
 }
 
