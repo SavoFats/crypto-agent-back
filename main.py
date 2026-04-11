@@ -260,7 +260,7 @@ async def enter_position(sym_data: dict):
     # ── MODALITA' REALE ────────────────────────────────────────────────────────
     if is_real:
         try:
-            product_id = f"{sym}-USD"
+            product_id = f"{sym}-USDC"
             order_configuration, note = await build_buy_order_config(product_id, size, price)
             if not order_configuration:
                 cooldown_symbol(sym, f"{product_id} non disponibile per ordini reali")
@@ -317,7 +317,7 @@ async def exit_position(pos: dict, reason: str):
     if pos.get("realMode", False):
         try:
             qty_coin = pos["size"] / pos["entryPrice"]  # stima quantita'
-            product_id = f"{sym}-USD"
+            product_id = f"{sym}-USDC"
             order_configuration, note = await build_sell_order_config(product_id, qty_coin, cur)
             if not order_configuration:
                 add_log("info", "ERRORE", f"Vendita {sym} bloccata: {product_id} non disponibile")
