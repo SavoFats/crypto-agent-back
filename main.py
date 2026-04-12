@@ -37,12 +37,14 @@ def make_coinbase_jwt(method: str, path: str) -> str:
 
 async def coinbase_request(method: str, path: str, body: dict = None) -> dict:
     """Esegue una richiesta autenticata all'API Coinbase Advanced"""
-    token = make_coinbase_jwt(method, path)
+    # JWT usa solo il path senza query string
+    jwt_path = path.split("?")[0]
+    token = make_coinbase_jwt(method, jwt_path)
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         if method == "GET":
             r = await client.get(f"{COINBASE_BASE}{path}", headers=headers)
         else:
@@ -91,40 +93,35 @@ STABLES = {'USDT','USDC','BUSD','DAI','FDUSD','TUSD','USDP','GUSD','FRAX',
 
 async def fetch_prices():
     try:
-        # Coinbase Advanced API pubblica — nessuna auth necessaria per i prezzi
-        async with httpx.AsyncClient(timeout=15) as client:
-            res = await client.get(
-                f"{COINBASE_BASE}/api/v3/brokerage/market/products",
-                params={"product_type": "SPOT", "limit": 500}
-            )
-            data = res.json()
-
         min_vol = agent_state["config"].get("minVolume", 10_000_000)
-        products = data.get("products", [])
+
+        # Usa Coinbase Advanced API autenticata — lista prodotti con prezzi
+        result = await coinbase_request("GET", "/api/v3/brokerage/market/products?product_type=SPOT&limit=500")
+        products = result.get("products", [])
 
         for p in products:
             # solo coppie USD
             if p.get("quote_currency_id") != "USD":
                 continue
+            if p.get("status") != "online":
+                continue
+
             sym = p.get("base_currency_id", "")
             if not sym or not sym.isascii() or not sym.isalpha():
                 continue
             if sym in STABLES:
                 continue
-            # filtro status
-            if p.get("status") != "online":
-                continue
 
             try:
                 price = float(p.get("price", 0) or 0)
                 change24h = float(p.get("price_percentage_change_24h", 0) or 0)
-                vol_usdt = float(p.get("volume_24h", 0) or 0)
+                vol_usd = float(p.get("volume_24h", 0) or 0) * price  # volume in USD
             except:
                 continue
 
             if price <= 0:
                 continue
-            if vol_usdt < min_vol:
+            if vol_usd < min_vol:
                 continue
 
             if sym not in market_data:
@@ -132,7 +129,6 @@ async def fetch_prices():
                     "price": 0.0, "change1h": 0.0, "change24h": 0.0,
                     "volume24h": 0.0, "priceHistory": [], "icon": sym[0]
                 }
-
             hist = market_data[sym]["priceHistory"]
             hist.append(price)
             if len(hist) > 60:
@@ -144,9 +140,8 @@ async def fetch_prices():
             market_data[sym]["price"] = price
             market_data[sym]["change1h"] = change1h
             market_data[sym]["change24h"] = change24h
-            market_data[sym]["volume24h"] = vol_usdt
+            market_data[sym]["volume24h"] = vol_usd
 
-            # aggiorna posizioni aperte
             for pos in agent_state["positions"]:
                 if pos["symbol"] == sym:
                     pos["currentPrice"] = price
