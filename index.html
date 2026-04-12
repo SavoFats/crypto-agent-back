@@ -397,6 +397,53 @@ input[type=number]:disabled {
 .filter-btn.gain { color: var(--green); }
 .filter-btn.loss { color: var(--red); }
 
+/* ── AUTH SCREENS ── */
+#authScreen {
+  position: fixed; inset: 0; z-index: 200;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.auth-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px 24px;
+  width: 100%; max-width: 400px;
+}
+.auth-title {
+  font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+  margin-bottom: 6px; text-align: center;
+}
+.auth-sub {
+  font-size: 13px; color: var(--text3); text-align: center;
+  margin-bottom: 28px; font-weight: 500;
+}
+.auth-field { margin-bottom: 16px; }
+.auth-field label { font-size: 12px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 8px; }
+.auth-field input {
+  width: 100%; background: var(--surface2);
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 13px 14px; color: var(--text); font-size: 15px;
+  font-family: var(--sans); outline: none; transition: border-color 0.15s;
+}
+.auth-field input:focus { border-color: var(--blue); }
+.auth-btn {
+  width: 100%; padding: 15px; background: var(--blue);
+  border: none; border-radius: var(--radius); color: #fff;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  font-family: var(--sans); margin-top: 8px;
+  box-shadow: 0 4px 20px rgba(0,82,255,0.3);
+  transition: all 0.15s;
+}
+.auth-btn:active { transform: scale(0.98); }
+.auth-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.auth-switch { text-align: center; margin-top: 20px; font-size: 13px; color: var(--text3); }
+.auth-switch a { color: var(--blue); cursor: pointer; font-weight: 600; text-decoration: none; }
+.auth-error { background: var(--red-dim); border: 1px solid var(--red); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--red); margin-bottom: 16px; display: none; font-weight: 500; }
+.auth-logo { text-align: center; margin-bottom: 24px; }
+.auth-logo-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 16px var(--blue-glow); display: inline-block; margin-right: 8px; }
+
 /* ── EMPTY ── */
 .empty { text-align: center; padding: 48px 20px; color: var(--text3); }
 .empty-icon { font-size: 36px; margin-bottom: 10px; opacity: 0.5; }
@@ -418,6 +465,63 @@ input[type=number]:disabled {
 </head>
 <body>
 
+<!-- AUTH SCREEN -->
+<div id="authScreen">
+  <!-- LOGIN -->
+  <div class="auth-card" id="loginCard">
+    <div class="auth-logo"><span class="auth-logo-dot"></span><span style="font-size:20px;font-weight:700">CryptoAgent</span></div>
+    <div class="auth-title">Bentornato</div>
+    <div class="auth-sub">Accedi al tuo account</div>
+    <div class="auth-error" id="loginError"></div>
+    <div class="auth-field">
+      <label>Username</label>
+      <input type="text" id="loginUser" placeholder="il tuo username" autocomplete="username">
+    </div>
+    <div class="auth-field">
+      <label>Password</label>
+      <input type="password" id="loginPass" placeholder="la tua password" autocomplete="current-password">
+    </div>
+    <button class="auth-btn" onclick="doLogin()">Accedi</button>
+    <div class="auth-switch">Non hai un account? <a onclick="showRegister()">Registrati</a></div>
+  </div>
+
+  <!-- REGISTER -->
+  <div class="auth-card" id="registerCard" style="display:none">
+    <div class="auth-logo"><span class="auth-logo-dot"></span><span style="font-size:20px;font-weight:700">CryptoAgent</span></div>
+    <div class="auth-title">Crea account</div>
+    <div class="auth-sub">Inizia a tradare con il tuo agente AI</div>
+    <div class="auth-error" id="registerError"></div>
+    <div class="auth-field">
+      <label>Username</label>
+      <input type="text" id="regUser" placeholder="scegli un username">
+    </div>
+    <div class="auth-field">
+      <label>Password</label>
+      <input type="password" id="regPass" placeholder="minimo 6 caratteri">
+    </div>
+    <button class="auth-btn" onclick="doRegister()">Registrati</button>
+    <div class="auth-switch">Hai gia un account? <a onclick="showLogin()">Accedi</a></div>
+  </div>
+
+  <!-- API KEYS -->
+  <div class="auth-card" id="apiKeysCard" style="display:none">
+    <div class="auth-logo"><span class="auth-logo-dot"></span><span style="font-size:20px;font-weight:700">CryptoAgent</span></div>
+    <div class="auth-title">Collega Coinbase</div>
+    <div class="auth-sub">Inserisci le tue API key di Coinbase Advanced per abilitare il trading reale</div>
+    <div class="auth-error" id="keysError"></div>
+    <div class="auth-field">
+      <label>API Key</label>
+      <input type="text" id="cbKey" placeholder="organizations/xxx/apiKeys/xxx">
+    </div>
+    <div class="auth-field">
+      <label>API Secret</label>
+      <input type="password" id="cbSecret" placeholder="-----BEGIN EC PRIVATE KEY-----">
+    </div>
+    <button class="auth-btn" onclick="saveKeys()">Salva e continua</button>
+    <div class="auth-switch"><a onclick="skipKeys()">Salta per ora — usa solo simulazione</a></div>
+  </div>
+</div>
+
 <div class="hdr">
   <div class="hdr-logo">
     <div class="hdr-logo-dot"></div>
@@ -430,6 +534,7 @@ input[type=number]:disabled {
     </div>
     <button class="stop-btn" id="stopBtn" onclick="stopAgent()" disabled>&#9632;</button>
     <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">&#9728;</button>
+    <button class="theme-btn" onclick="logout()" title="Logout" style="font-size:14px">&#x2197;</button>
   </div>
 </div>
 
@@ -608,6 +713,126 @@ input[type=number]:disabled {
 
 <script>
 const API = 'https://crypto-agent-back-production.up.railway.app';
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+let _authToken = localStorage.getItem('ca_token') || '';
+let _username = localStorage.getItem('ca_username') || '';
+
+function authHeaders() {
+  return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _authToken };
+}
+
+function showLogin() {
+  document.getElementById('loginCard').style.display = '';
+  document.getElementById('registerCard').style.display = 'none';
+  document.getElementById('apiKeysCard').style.display = 'none';
+}
+
+function showRegister() {
+  document.getElementById('loginCard').style.display = 'none';
+  document.getElementById('registerCard').style.display = '';
+  document.getElementById('apiKeysCard').style.display = 'none';
+}
+
+function showApiKeys() {
+  document.getElementById('loginCard').style.display = 'none';
+  document.getElementById('registerCard').style.display = 'none';
+  document.getElementById('apiKeysCard').style.display = '';
+}
+
+function hideAuthScreen() {
+  document.getElementById('authScreen').style.display = 'none';
+}
+
+function showAuthError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  if (!username || !password) return showAuthError('loginError', 'Inserisci username e password');
+  try {
+    const r = await fetch(API + '/auth/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const d = await r.json();
+    if (!r.ok) return showAuthError('loginError', d.detail || 'Errore login');
+    _authToken = d.token; _username = d.username;
+    localStorage.setItem('ca_token', _authToken);
+    localStorage.setItem('ca_username', _username);
+    if (!d.has_api_keys) { showApiKeys(); return; }
+    hideAuthScreen();
+    initApp();
+  } catch(e) { showAuthError('loginError', 'Errore di connessione'); }
+}
+
+async function doRegister() {
+  const username = document.getElementById('regUser').value.trim();
+  const password = document.getElementById('regPass').value;
+  if (!username || !password) return showAuthError('registerError', 'Compila tutti i campi');
+  try {
+    const r = await fetch(API + '/auth/register', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const d = await r.json();
+    if (!r.ok) return showAuthError('registerError', d.detail || 'Errore registrazione');
+    _authToken = d.token; _username = d.username;
+    localStorage.setItem('ca_token', _authToken);
+    localStorage.setItem('ca_username', _username);
+    showApiKeys();
+  } catch(e) { showAuthError('registerError', 'Errore di connessione'); }
+}
+
+async function saveKeys() {
+  const cb_key = document.getElementById('cbKey').value.trim();
+  const cb_secret = document.getElementById('cbSecret').value.trim();
+  if (!cb_key || !cb_secret) return showAuthError('keysError', 'Inserisci entrambe le chiavi');
+  try {
+    const r = await fetch(API + '/auth/save_keys', {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({cb_key, cb_secret})
+    });
+    if (!r.ok) return showAuthError('keysError', 'Errore salvataggio chiavi');
+    hideAuthScreen();
+    initApp();
+  } catch(e) { showAuthError('keysError', 'Errore di connessione'); }
+}
+
+function skipKeys() {
+  hideAuthScreen();
+  initApp();
+}
+
+function logout() {
+  localStorage.removeItem('ca_token');
+  localStorage.removeItem('ca_username');
+  location.reload();
+}
+
+// Controlla token al caricamento
+async function checkAuth() {
+  if (!_authToken) { showLogin(); return; }
+  try {
+    const r = await fetch(API + '/auth/me', { headers: authHeaders() });
+    if (!r.ok) { localStorage.removeItem('ca_token'); showLogin(); return; }
+    const d = await r.json();
+    _username = d.username;
+    if (!d.has_api_keys) { showApiKeys(); return; }
+    hideAuthScreen();
+    initApp();
+  } catch(e) { showLogin(); }
+}
+
+function initApp() {
+  // aggiorna header con username
+  document.getElementById('statusLabel').textContent = _username.toUpperCase();
+  startupSession();
+}
 // mappa nomi completi
 const COIN_NAMES = {
   BTC:'Bitcoin', ETH:'Ethereum', SOL:'Solana', BNB:'BNB', XRP:'XRP',
@@ -1014,9 +1239,8 @@ async function poll() {
   } catch(e) { console.error(e); }
 }
 
-// recovery sessione al caricamento pagina
-(async function() {
-  // ripristina sempre i valori config salvati
+// startup session — chiamato dopo auth
+async function startupSession() {
   restoreConfigFromStorage();
   try {
     const r = await fetch(API + '/status');
@@ -1031,7 +1255,10 @@ async function poll() {
     }
   } catch(e) {}
   startPolling();
-})();
+}
+
+// Avvia auth check
+checkAuth();
 
 function render() {
   const dot = document.getElementById('statusDot');
