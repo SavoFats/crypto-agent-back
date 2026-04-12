@@ -23,7 +23,14 @@ COINBASE_PRIVATE_KEY = os.environ.get("CB_SECRET", "")
 def make_coinbase_jwt(method: str, path: str) -> str:
     """Genera JWT per autenticazione Coinbase Advanced API"""
     import re
-    key = COINBASE_PRIVATE_KEY.replace("\\n", "\n")
+    # Gestisce sia \n letterali che newline reali
+    key = COINBASE_PRIVATE_KEY
+    if '\\n' in key:
+        key = key.replace('\\n', '\n')
+    elif '\n' not in key and 'BEGIN' in key:
+        # prova a ricostruire i newline dai delimitatori PEM
+        key = key.replace('-----BEGIN EC PRIVATE KEY----- ', '-----BEGIN EC PRIVATE KEY-----\n')
+        key = key.replace(' -----END EC PRIVATE KEY-----', '\n-----END EC PRIVATE KEY-----')
     payload = {
         "sub": COINBASE_API_KEY,
         "iss": "cdp",
@@ -142,41 +149,55 @@ async def refresh_coinbase_products():
 async def fetch_prices():
     global _products_last_update
     try:
-        # Aggiorna SEMPRE i prezzi da Coinbase ad ogni ciclo
-        result = await coinbase_request("GET", "/api/v3/brokerage/market/products?product_type=SPOT&limit=500")
-        products = result.get("products", [])
+        # API pubblica Coinbase Exchange — no autenticazione necessaria
+        async with httpx.AsyncClient(timeout=15) as client:
+            # Ticker 24h per tutti i prodotti USD
+            r = await client.get("https://api.exchange.coinbase.com/products")
+            all_products = r.json()
 
-        # Se la lista prodotti e vuota o scaduta, aggiorna anche il cache
-        if not products or time.time() - _products_last_update > 3600:
-            _products_last_update = time.time()
+        # Filtra solo prodotti USD online
+        usd_syms = {}
+        for p in all_products:
+            if not isinstance(p, dict): continue
+            if p.get("quote_currency") != "USD": continue
+            if p.get("status") != "online": continue
+            sym = p.get("base_currency", "")
+            if not sym or not sym.isascii() or not sym.isalpha(): continue
+            if sym in STABLES: continue
+            usd_syms[p["id"]] = sym  # es. "BTC-USD" -> "BTC"
 
-        # Recupera candles 1h per calcolare change1h reale
-        # Un candle per ogni prodotto: prezzo apertura 1h fa vs prezzo attuale
-        import time as _time
-        now_ts = int(_time.time())
-        one_hour_ago = now_ts - 3600
+        # Fetch stats 24h per tutti i prodotti in una chiamata
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get("https://api.exchange.coinbase.com/products/stats")
+            # questo endpoint non esiste — usiamo ticker individuale via batch
+            # invece usiamo Binance per i dati 24h ma filtriamo per coin Coinbase
+            r2 = await client.get(f"{BINANCE_BASE}/api/v3/ticker/24hr")
+            tickers = r2.json()
 
-        for p in products:
-            if p.get("quote_currency_id") != "USD":
-                continue
-            if p.get("status") != "online":
-                continue
-            sym = p.get("base_currency_id", "")
-            if not sym or not sym.isascii() or not sym.isalpha():
-                continue
-            if sym in STABLES:
-                continue
-            try:
-                price = float(p.get("price", 0) or 0)
-                change24h = float(p.get("price_percentage_change_24h", 0) or 0)
-                vol_usd = float(p.get("volume_24h", 0) or 0) * price
-            except:
-                continue
-            if price <= 0:
-                continue
+        # Mappa Binance ticker filtrato per coin Coinbase
+        binance_map = {}
+        for t in tickers:
+            pair = t.get("symbol","")
+            if pair.endswith("USDT"):
+                s = pair[:-4]
+                if s in usd_syms.values():
+                    binance_map[s] = t
 
-            # aggiorna cache prodotti
-            _coinbase_products[sym] = {"price": price, "change24h": change24h, "volume24h": vol_usd}
+        for product_id, sym in usd_syms.items():
+            t = binance_map.get(sym)
+            if t:
+                try:
+                    price = float(t["lastPrice"])
+                    change24h = float(t["priceChangePercent"])
+                    vol_usd = float(t["quoteVolume"])
+                except:
+                    continue
+            else:
+                continue
+            if price <= 0: continue
+
+            # aggiorna cache prodotti (logo vuoto per ora, gestito dal frontend)
+            _coinbase_products[sym] = {"price": price, "change24h": change24h, "volume24h": vol_usd, "logo_url": ""}
 
             if sym not in market_data:
                 market_data[sym] = {
@@ -444,7 +465,8 @@ async def scan_and_trade():
             if d["price"] > 0
             and d.get("volume24h", 0) >= min_vol   # filtro volume solo qui
             and sym not in open_syms
-            and sym in _coinbase_products  # solo coin Coinbase con logo verificato
+            and sym in _coinbase_products  # solo coin disponibili su Coinbase
+            and sym in LOGO_APPROVED  # solo coin con logo verificato
             and (agent_state["cooldowns"].get(sym, 0) < datetime.now().timestamp() * 1000)
         ],
         key=lambda d: d["change24h"],
@@ -638,6 +660,17 @@ async def test_coinbase():
         return {"ok": True, "balances": balances}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+@app.get("/debug_key")
+async def debug_key():
+    key = COINBASE_PRIVATE_KEY
+    return {
+        "len": len(key),
+        "has_literal_backslash_n": chr(92)+"n" in key,
+        "has_real_newline": chr(10) in key,
+        "first_50": key[:50],
+        "lines": len(key.splitlines())
+    }
 
 @app.get("/logos")
 async def get_logos():
