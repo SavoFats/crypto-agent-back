@@ -84,37 +84,48 @@ def unrealized_pnl():
         for p in agent_state["positions"]
     )
 
-# ── binance ───────────────────────────────────────────────────────────────────
+# ── coinbase ─────────────────────────────────────────────────────────────────
+
+STABLES = {'USDT','USDC','BUSD','DAI','FDUSD','TUSD','USDP','GUSD','FRAX',
+           'LUSD','SUSD','EUR','GBP','USD','USDD','USTC','PAX','CBBTC','WBTC'}
 
 async def fetch_prices():
     try:
+        # Coinbase Advanced API pubblica — nessuna auth necessaria per i prezzi
         async with httpx.AsyncClient(timeout=15) as client:
-            res = await client.get(f"{BINANCE_BASE}/api/v3/ticker/24hr")
-            tickers = res.json()
+            res = await client.get(
+                f"{COINBASE_BASE}/api/v3/brokerage/market/products",
+                params={"product_type": "SPOT", "limit": 500}
+            )
+            data = res.json()
 
-        for t in tickers:
-            pair = t["symbol"]
-            # solo coppie USDT
-            if not pair.endswith("USDT"):
-                continue
-            # filtro volume
-            try:
-                vol_usdt = float(t["quoteVolume"])
-            except:
-                continue
-            min_vol = agent_state["config"].get("minVolume", 10_000_000)
-            if vol_usdt < min_vol:
-                continue
+        min_vol = agent_state["config"].get("minVolume", 10_000_000)
+        products = data.get("products", [])
 
-            sym = pair[:-4]  # es. BTCUSDT -> BTC
-            if not sym.isascii() or not sym.isalpha():
+        for p in products:
+            # solo coppie USD
+            if p.get("quote_currency_id") != "USD":
                 continue
-            # escludi stablecoin
-            STABLES = {'USDT','USDC','BUSD','DAI','FDUSD','TUSD','TRU','USDP','GUSD','FRAX','LUSD','SUSD','EURS','EUR','GBP','USD','USDD','USTC','USDJ','VAI','PAX'}
+            sym = p.get("base_currency_id", "")
+            if not sym or not sym.isascii() or not sym.isalpha():
+                continue
             if sym in STABLES:
                 continue
-            price = float(t["lastPrice"])
-            change24h = float(t["priceChangePercent"])
+            # filtro status
+            if p.get("status") != "online":
+                continue
+
+            try:
+                price = float(p.get("price", 0) or 0)
+                change24h = float(p.get("price_percentage_change_24h", 0) or 0)
+                vol_usdt = float(p.get("volume_24h", 0) or 0)
+            except:
+                continue
+
+            if price <= 0:
+                continue
+            if vol_usdt < min_vol:
+                continue
 
             if sym not in market_data:
                 market_data[sym] = {
@@ -135,7 +146,7 @@ async def fetch_prices():
             market_data[sym]["change24h"] = change24h
             market_data[sym]["volume24h"] = vol_usdt
 
-            # update open positions
+            # aggiorna posizioni aperte
             for pos in agent_state["positions"]:
                 if pos["symbol"] == sym:
                     pos["currentPrice"] = price
@@ -545,7 +556,7 @@ async def chat(body: dict):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "binance": any(d["price"] > 0 for d in market_data.values())}
+    return {"status": "ok", "coinbase": any(d["price"] > 0 for d in market_data.values())}
 
 @app.get("/test_coinbase")
 async def test_coinbase():
