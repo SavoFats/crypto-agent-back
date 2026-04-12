@@ -91,14 +91,13 @@ def unrealized_pnl():
 STABLES = {'USDT','USDC','BUSD','DAI','FDUSD','TUSD','USDP','GUSD','FRAX',
            'LUSD','SUSD','EUR','GBP','USD','USDD','USTC','PAX','CBBTC','WBTC'}
 
-# Nessuna LOGO_APPROVED hardcoded — usiamo direttamente i prodotti Coinbase
-
 # Cache prodotti Coinbase — aggiornata ogni ora
-_coinbase_products: dict = {}  # sym -> {price, change24h, volume24h}
+# sym -> {price, change24h, volume24h, logo_url}
+_coinbase_products: dict = {}
 _products_last_update: float = 0
 
 async def refresh_coinbase_products():
-    """Scarica lista e prezzi da Coinbase Advanced API autenticata"""
+    """Scarica lista prodotti, prezzi e loghi da Coinbase Advanced API"""
     global _coinbase_products, _products_last_update
     try:
         result = await coinbase_request("GET", "/api/v3/brokerage/market/products?product_type=SPOT&limit=500")
@@ -118,11 +117,16 @@ async def refresh_coinbase_products():
                 price = float(p.get("price", 0) or 0)
                 change24h = float(p.get("price_percentage_change_24h", 0) or 0)
                 vol = float(p.get("volume_24h", 0) or 0) * price
+                # logo direttamente da Coinbase
+                logo_url = p.get("base_currency_details", {}).get("image_url", "") or ""
             except:
                 continue
             if price <= 0:
                 continue
-            new_products[sym] = {"price": price, "change24h": change24h, "volume24h": vol}
+            # escludi coin senza logo — se Coinbase non ha il logo non è una coin seria
+            if not logo_url:
+                continue
+            new_products[sym] = {"price": price, "change24h": change24h, "volume24h": vol, "logo_url": logo_url}
         if new_products:
             _coinbase_products = new_products
             _products_last_update = time.time()
@@ -435,7 +439,7 @@ async def scan_and_trade():
             if d["price"] > 0
             and d.get("volume24h", 0) >= min_vol   # filtro volume solo qui
             and sym not in open_syms
-            and sym in _coinbase_products  # solo coin disponibili su Coinbase
+            and sym in _coinbase_products  # solo coin Coinbase con logo verificato
             and (agent_state["cooldowns"].get(sym, 0) < datetime.now().timestamp() * 1000)
         ],
         key=lambda d: d["change24h"],
@@ -449,9 +453,14 @@ async def scan_and_trade():
     ]
 
     top3_detail = [(d["symbol"], round(d["change24h"],2), round(d.get("change1h",0),2)) for d in ranked[:3]]
+    # log coin con change1h positivo ma escluse dal filtro volume
+    vol_blocked = [(sym, round(d.get("change1h",0),2), round(d.get("volume24h",0)/1e6,1)) 
+                   for sym, d in market_data.items() 
+                   if d.get("change1h",0) >= min_mom and d.get("volume24h",0) < min_vol][:3]
     add_log("info", "SCAN",
         f"Top3 (24h,1h): {top3_detail} | "
         f"Candidati: {len(candidates)} | Slot: {slots} | Universe: {len(prices_ok)} | BTC1h: {btc_1h:+.2f}%"
+        + (f" | VolBlocked: {vol_blocked}" if vol_blocked else "")
     )
 
     for d in candidates[:slots]:
@@ -624,6 +633,11 @@ async def test_coinbase():
         return {"ok": True, "balances": balances}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+@app.get("/logos")
+async def get_logos():
+    """Restituisce mappa sym->logo_url per tutte le coin disponibili"""
+    return {sym: d["logo_url"] for sym, d in _coinbase_products.items() if d.get("logo_url")}
 
 @app.get("/debug_products")
 async def debug_products():
