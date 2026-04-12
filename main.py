@@ -119,11 +119,16 @@ async def refresh_coinbase_products():
                 vol = float(p.get("volume_24h", 0) or 0) * price
                 # logo direttamente da Coinbase
                 logo_url = p.get("base_currency_details", {}).get("image_url", "") or ""
+                # fallback: prova altri campi dove Coinbase potrebbe mettere il logo
+                if not logo_url:
+                    logo_url = p.get("base_asset_image", "") or p.get("image_url", "") or ""
             except:
                 continue
             if price <= 0:
                 continue
-            # escludi coin senza logo — se Coinbase non ha il logo non è una coin seria
+            # debug: stampa struttura primo prodotto
+            if not _coinbase_products and sym == "BTC":
+                print(f"DEBUG BTC keys: {list(p.keys())}")
             if not logo_url:
                 continue
             new_products[sym] = {"price": price, "change24h": change24h, "volume24h": vol, "logo_url": logo_url}
