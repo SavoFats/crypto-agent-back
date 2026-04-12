@@ -468,10 +468,10 @@ input[type=number]:disabled {
         oninput="document.getElementById('slVal').textContent=this.value+'%'">
     </div>
     <div class="field">
-      <div class="field-label">Momentum minimo 24h <span id="momVal">1%</span></div>
+      <div class="field-label">Momentum minimo 1h <span id="momVal">1%</span></div>
       <input type="range" id="minMomentum" min="0" max="30" value="1" step="0.5"
         oninput="document.getElementById('momVal').textContent=parseFloat(this.value).toFixed(1)+'%'">
-      <div class="field-hint">Entra solo su coin che hanno gia fatto +X% nelle ultime 24h</div>
+      <div class="field-hint">Entra solo su coin che stanno salendo di almeno +X% nell'ultima ora</div>
     </div>
     <div class="field">
       <div class="field-label">Volume minimo universe <span id="volVal">$10M</span></div>
@@ -499,7 +499,7 @@ input[type=number]:disabled {
     </div>
 
     <button class="start-btn" id="startBtn" onclick="startAgent()">Avvia sessione</button>
-    <button class="reset-btn" onclick="resetAgent()">Reset</button>
+    <button class="reset-btn" id="resetBtn" onclick="resetAgent()">Reset</button>
     <div style="height:8px"></div>
   </div>
 
@@ -624,9 +624,86 @@ function getCoinName(sym) {
   return COIN_NAMES[sym] || sym;
 }
 
+// Mappa simbolo -> URL logo da CoinGecko (affidabile e completa)
+const LOGO_URLS = {
+  BTC:'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
+  ETH:'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+  SOL:'https://assets.coingecko.com/coins/images/4128/small/solana.png',
+  BNB:'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',
+  XRP:'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png',
+  ADA:'https://assets.coingecko.com/coins/images/975/small/cardano.png',
+  AVAX:'https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png',
+  DOT:'https://assets.coingecko.com/coins/images/12171/small/polkadot.png',
+  LINK:'https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png',
+  MATIC:'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
+  UNI:'https://assets.coingecko.com/coins/images/12504/small/uniswap-uni.png',
+  NEAR:'https://assets.coingecko.com/coins/images/10365/small/near_icon.png',
+  INJ:'https://assets.coingecko.com/coins/images/12882/small/Secondary_Symbol.png',
+  APT:'https://assets.coingecko.com/coins/images/26455/small/aptos_round.png',
+  ARB:'https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg',
+  OP:'https://assets.coingecko.com/coins/images/25244/small/Optimism.png',
+  ATOM:'https://assets.coingecko.com/coins/images/1481/small/cosmos_hub.png',
+  DOGE:'https://assets.coingecko.com/coins/images/5/small/dogecoin.png',
+  SHIB:'https://assets.coingecko.com/coins/images/11939/small/shiba.png',
+  LTC:'https://assets.coingecko.com/coins/images/2/small/litecoin.png',
+  TON:'https://assets.coingecko.com/coins/images/17980/small/ton_symbol.png',
+  TRX:'https://assets.coingecko.com/coins/images/1094/small/tron-logo.png',
+  HBAR:'https://assets.coingecko.com/coins/images/3688/small/hbar.png',
+  VET:'https://assets.coingecko.com/coins/images/1167/small/VET_Token_Icon.png',
+  FIL:'https://assets.coingecko.com/coins/images/12817/small/filecoin.png',
+  ALGO:'https://assets.coingecko.com/coins/images/4380/small/download.png',
+  ETC:'https://assets.coingecko.com/coins/images/453/small/ethereum-classic-logo.png',
+  AAVE:'https://assets.coingecko.com/coins/images/12645/small/AAVE.png',
+  GRT:'https://assets.coingecko.com/coins/images/13397/small/Graph_Token.png',
+  MKR:'https://assets.coingecko.com/coins/images/1364/small/Mark_Maker.png',
+  SNX:'https://assets.coingecko.com/coins/images/3406/small/SNX.png',
+  CRV:'https://assets.coingecko.com/coins/images/12124/small/Curve.png',
+  LDO:'https://assets.coingecko.com/coins/images/13573/small/Lido_DAO.png',
+  RUNE:'https://assets.coingecko.com/coins/images/6595/small/Rune200x200.png',
+  FTM:'https://assets.coingecko.com/coins/images/4001/small/Fantom_round.png',
+  ENJ:'https://assets.coingecko.com/coins/images/1102/small/enjin-coin-logo.png',
+  ENA:'https://assets.coingecko.com/coins/images/36530/small/ethena.png',
+  RENDER:'https://assets.coingecko.com/coins/images/11636/small/rndr.png',
+  RNDR:'https://assets.coingecko.com/coins/images/11636/small/rndr.png',
+  JUP:'https://assets.coingecko.com/coins/images/34188/small/jup.png',
+  PYTH:'https://assets.coingecko.com/coins/images/31924/small/pyth.png',
+  SUI:'https://assets.coingecko.com/coins/images/26375/small/sui_asset.jpeg',
+  SEI:'https://assets.coingecko.com/coins/images/28205/small/Sei_Logo_-_Transparent.png',
+  TAO:'https://assets.coingecko.com/coins/images/28452/small/ARUsPeNQ_400x400.jpeg',
+  WLD:'https://assets.coingecko.com/coins/images/31069/small/worldcoin.jpeg',
+  PEPE:'https://assets.coingecko.com/coins/images/29850/small/pepe-token.jpeg',
+  FLOKI:'https://assets.coingecko.com/coins/images/16746/small/PNG_image.png',
+  BONK:'https://assets.coingecko.com/coins/images/28600/small/bonk.jpg',
+  WIF:'https://assets.coingecko.com/coins/images/33566/small/wif.png',
+  RAVE:'https://assets.coingecko.com/coins/images/25686/small/rave.png',
+  CTSI:'https://assets.coingecko.com/coins/images/11038/small/cartesi.png',
+  IOTX:'https://assets.coingecko.com/coins/images/3334/small/iotex-logo.png',
+  NKN:'https://assets.coingecko.com/coins/images/3375/small/nkn.png',
+  DRIFT:'https://assets.coingecko.com/coins/images/35254/small/drift.png',
+  XLM:'https://assets.coingecko.com/coins/images/100/small/Stellar_symbol_black_RGB.png',
+  SAND:'https://assets.coingecko.com/coins/images/12129/small/sandbox_logo.jpg',
+  MANA:'https://assets.coingecko.com/coins/images/878/small/decentraland-mana.png',
+  AXS:'https://assets.coingecko.com/coins/images/13029/small/axie_infinity_logo.png',
+  CHZ:'https://assets.coingecko.com/coins/images/8834/small/Chiliz.png',
+  EGLD:'https://assets.coingecko.com/coins/images/12335/small/egld-token-logo.png',
+  THETA:'https://assets.coingecko.com/coins/images/2538/small/theta-token-logo.png',
+  ZEC:'https://assets.coingecko.com/coins/images/486/small/circle-zcash-color.png',
+  BAT:'https://assets.coingecko.com/coins/images/677/small/basic-attention-token.png',
+  ZRX:'https://assets.coingecko.com/coins/images/863/small/0x.png',
+  COMP:'https://assets.coingecko.com/coins/images/10775/small/COMP.png',
+  YFI:'https://assets.coingecko.com/coins/images/11849/small/yfi-192x192.png',
+  SUSHI:'https://assets.coingecko.com/coins/images/12271/small/512x512_Logo_no_chop.png',
+  '1INCH':'https://assets.coingecko.com/coins/images/13469/small/1inch-token.png',
+  SKL:'https://assets.coingecko.com/coins/images/13245/small/SKALE_token_300x300.png',
+  ANKR:'https://assets.coingecko.com/coins/images/8710/small/Ankr.png',
+  STORJ:'https://assets.coingecko.com/coins/images/949/small/storj.png',
+  OGN:'https://assets.coingecko.com/coins/images/3296/small/op.jpg',
+  RLC:'https://assets.coingecko.com/coins/images/821/small/iExec_RLC_icon_Hex_Black.png',
+  LOOM:'https://assets.coingecko.com/coins/images/3387/small/1_QGdkBrYnqEADO-8Qavqxvg.png',
+};
+
 function getLogo(sym) {
-  // coincap ha ottima copertura
-  return 'https://assets.coincap.io/assets/icons/' + sym.toLowerCase() + '@2x.png';
+  return LOGO_URLS[sym] || null;
 }
 
 let S = { running:false, capital:0, currentCapital:0, pnl:0, pct:0, tradeCount:0, winRate:0, positions:[], pnlHistory:[], log:[], remainingMs:0 };
@@ -652,6 +729,115 @@ function toggleTheme() {
   localStorage.setItem('theme', light ? 'light' : 'dark');
 }
 (function(){ const t=localStorage.getItem('theme'); if(t==='light'){document.documentElement.setAttribute('data-theme','light'); setTimeout(()=>{ const b=document.getElementById('themeBtn'); if(b) b.innerHTML='&#9790;'; },0);} })();
+
+// Default values per reset
+const DEFAULTS = {
+  capital: 1000,
+  allocPct: 20,
+  sessionDuration: 8,
+  stopLoss: 3,
+  minMomentum: 1,
+  minVolume: 10,
+  cooldown: 1,
+};
+
+function lockConfig() {
+  const ids = ['capital','allocPct','sessionDuration','stopLoss','minMomentum','minVolume','cooldown'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = true;
+  });
+  document.getElementById('modeSimBtn').disabled = true;
+  document.getElementById('modeRealBtn').disabled = true;
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('resetBtn').style.display = 'none';
+}
+
+function unlockConfig() {
+  const ids = ['capital','allocPct','sessionDuration','stopLoss','minMomentum','minVolume','cooldown'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+  document.getElementById('modeSimBtn').disabled = false;
+  document.getElementById('modeRealBtn').disabled = false;
+  document.getElementById('startBtn').style.display = '';
+  document.getElementById('resetBtn').style.display = '';
+}
+
+function resetConfigToDefaults() {
+  document.getElementById('capital').value = DEFAULTS.capital;
+  document.getElementById('capitalDisplay').textContent = '$' + DEFAULTS.capital.toLocaleString();
+  document.getElementById('allocPct').value = DEFAULTS.allocPct;
+  document.getElementById('allocVal').textContent = DEFAULTS.allocPct + '%';
+  document.getElementById('sessionDuration').value = DEFAULTS.sessionDuration;
+  document.getElementById('sessionVal').textContent = DEFAULTS.sessionDuration + 'h';
+  document.getElementById('stopLoss').value = DEFAULTS.stopLoss;
+  document.getElementById('slVal').textContent = DEFAULTS.stopLoss + '%';
+  document.getElementById('minMomentum').value = DEFAULTS.minMomentum;
+  document.getElementById('momVal').textContent = DEFAULTS.minMomentum.toFixed(1) + '%';
+  document.getElementById('minVolume').value = DEFAULTS.minVolume;
+  document.getElementById('volVal').textContent = '$' + DEFAULTS.minVolume + 'M';
+  document.getElementById('cooldown').value = DEFAULTS.cooldown;
+  document.getElementById('cdVal').textContent = DEFAULTS.cooldown + 'h';
+  document.getElementById('allocHint').textContent = 'Max 5 posizioni · $' + (DEFAULTS.capital * DEFAULTS.allocPct / 100).toFixed(0) + ' per trade';
+  // reset modalita a simulazione
+  document.getElementById('modeRealBtn').classList.remove('active-real');
+  document.getElementById('modeSimBtn').classList.add('active-sim');
+  document.getElementById('modeHint').textContent = 'Nessun ordine reale verra eseguito';
+  document.getElementById('modeHint').style.color = '';
+  document.getElementById('totalBalanceDisplay').textContent = 'Modalita simulazione';
+  document.getElementById('totalBalanceDisplay').style.color = '';
+  _realMode = false; window._realMode = false;
+}
+
+function saveConfigToStorage(cfg) {
+  localStorage.setItem('ca_config', JSON.stringify(cfg));
+}
+
+function restoreConfigFromStorage() {
+  const saved = JSON.parse(localStorage.getItem('ca_config') || 'null');
+  if (!saved) return;
+  if (saved.capital) {
+    document.getElementById('capital').value = saved.capital;
+    document.getElementById('capitalDisplay').textContent = '$' + parseFloat(saved.capital).toLocaleString();
+  }
+  if (saved.allocPct) {
+    const pct = Math.round(saved.allocPct * 100);
+    document.getElementById('allocPct').value = pct;
+    document.getElementById('allocVal').textContent = pct + '%';
+  }
+  if (saved.sessionDuration) {
+    document.getElementById('sessionDuration').value = saved.sessionDuration;
+    document.getElementById('sessionVal').textContent = saved.sessionDuration + 'h';
+  }
+  if (saved.stopLoss) {
+    const sl = (saved.stopLoss * 100).toFixed(1);
+    document.getElementById('stopLoss').value = sl;
+    document.getElementById('slVal').textContent = sl + '%';
+  }
+  if (saved.minMomentum !== undefined) {
+    document.getElementById('minMomentum').value = saved.minMomentum;
+    document.getElementById('momVal').textContent = parseFloat(saved.minMomentum).toFixed(1) + '%';
+  }
+  if (saved.minVolume) {
+    const mv = saved.minVolume / 1000000;
+    document.getElementById('minVolume').value = mv;
+    document.getElementById('volVal').textContent = '$' + mv + 'M';
+  }
+  if (saved.cooldown !== undefined) {
+    document.getElementById('cooldown').value = saved.cooldown;
+    document.getElementById('cdVal').textContent = saved.cooldown + 'h';
+  }
+  if (saved.realMode) {
+    _realMode = true; window._realMode = true;
+    document.getElementById('modeRealBtn').classList.add('active-real');
+    document.getElementById('modeSimBtn').classList.remove('active-sim');
+    document.getElementById('modeHint').textContent = 'Sessione REALE in corso';
+    document.getElementById('modeHint').style.color = 'var(--red)';
+  }
+  updateAlloc();
+}
 
 function updateAlloc() {
   const v = parseInt(document.getElementById('allocPct').value);
@@ -765,7 +951,8 @@ async function startAgent() {
     const r = await fetch(API + '/start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({config:cfg}) });
     const d = await r.json();
     if (d.error) { alert(d.error); return; }
-    // salva stato sessione in localStorage per recovery dopo refresh
+    // salva config completa in localStorage per recovery dopo refresh
+    saveConfigToStorage(cfg);
     localStorage.setItem('ca_session', JSON.stringify({
       realMode: cfg.realMode,
       capital: cfg.capital,
@@ -773,6 +960,7 @@ async function startAgent() {
     }));
     document.getElementById('startBtn').disabled = true;
     document.getElementById('stopBtn').disabled = false;
+    lockConfig();
     showTab('monitor', document.querySelectorAll('.tab')[1]);
     startPolling();
   } catch(e) { alert('Errore connessione: ' + e.message); }
@@ -783,12 +971,16 @@ async function stopAgent() {
   localStorage.removeItem('ca_session');
   document.getElementById('startBtn').disabled = false;
   document.getElementById('stopBtn').disabled = true;
+  unlockConfig();
 }
 
 function resetAgent() {
   if (S.running) { alert('Ferma prima la sessione.'); return; }
   S = { running:false, capital:0, currentCapital:0, pnl:0, pct:0, tradeCount:0, winRate:0, positions:[], pnlHistory:[], log:[], remainingMs:0 };
   trades = []; lastLogLen = 0; lastTradeCount = 0;
+  localStorage.removeItem('ca_config');
+  localStorage.removeItem('ca_session');
+  resetConfigToDefaults();
   render();
 }
 
@@ -819,24 +1011,17 @@ async function poll() {
 
 // recovery sessione al caricamento pagina
 (async function() {
+  // ripristina sempre i valori config salvati
+  restoreConfigFromStorage();
   try {
     const r = await fetch(API + '/status');
     const d = await r.json();
     if (d.running) {
       S = d;
       window._lastStatus = d;
-      // ripristina modalita da localStorage
-      const saved = JSON.parse(localStorage.getItem('ca_session') || '{}');
-      if (saved.realMode) {
-        _realMode = true;
-        window._realMode = true;
-        document.getElementById('modeRealBtn').classList.add('active-real');
-        document.getElementById('modeSimBtn').classList.remove('active-sim');
-        document.getElementById('modeHint').textContent = 'Sessione REALE in corso';
-        document.getElementById('modeHint').style.color = 'var(--red)';
-      }
       document.getElementById('startBtn').disabled = true;
       document.getElementById('stopBtn').disabled = false;
+      lockConfig();
       showTab('monitor', document.querySelectorAll('.tab')[1]);
     }
   } catch(e) {}
