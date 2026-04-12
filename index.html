@@ -446,42 +446,42 @@ input[type=number]:disabled {
     </div>
     <div class="field">
       <div class="field-label">Capitale da tradare <span id="capitalDisplay" style="color:var(--blue)">$0</span></div>
-      <input type="number" id="capital" value="" min="1" step="0.5" inputmode="decimal" placeholder="Es. 8.00"
+      <input type="number" id="capital" value="" min="0" step="0.5" inputmode="decimal" placeholder="Es. 100.00"
         oninput="onCapitalInput()">
       <div class="field-hint" id="capitalHint">Inserisci quanto vuoi mettere a rischio in questa sessione</div>
     </div>
     <div class="field">
-      <div class="field-label">Allocazione per trade <span id="allocVal">20%</span></div>
-      <input type="range" id="allocPct" min="5" max="100" value="20" step="5" oninput="updateAlloc()">
+      <div class="field-label">Allocazione per trade <span id="allocVal">0%</span></div>
+      <input type="range" id="allocPct" min="0" max="100" value="0" step="5" oninput="updateAlloc()">
       <div class="field-hint" id="allocHint">Max 5 posizioni · $0 per trade</div>
     </div>
     <div class="field">
-      <div class="field-label">Durata sessione <span id="sessionVal">8h</span></div>
-      <input type="range" id="sessionDuration" min="1" max="24" value="8" step="1"
+      <div class="field-label">Durata sessione <span id="sessionVal">0h</span></div>
+      <input type="range" id="sessionDuration" min="0" max="24" value="0" step="1"
         oninput="document.getElementById('sessionVal').textContent=this.value+'h'">
     </div>
 
     <div class="section-label">Strategia</div>
     <div class="field">
-      <div class="field-label">Stop Loss <span id="slVal">3%</span></div>
-      <input type="range" id="stopLoss" min="1" max="15" value="3" step="0.5"
+      <div class="field-label">Stop Loss <span id="slVal">0%</span></div>
+      <input type="range" id="stopLoss" min="0" max="15" value="0" step="0.5"
         oninput="document.getElementById('slVal').textContent=this.value+'%'">
     </div>
     <div class="field">
-      <div class="field-label">Momentum minimo 1h <span id="momVal">1%</span></div>
-      <input type="range" id="minMomentum" min="0" max="30" value="1" step="0.5"
+      <div class="field-label">Momentum minimo 1h <span id="momVal">0%</span></div>
+      <input type="range" id="minMomentum" min="0" max="30" value="0" step="0.5"
         oninput="document.getElementById('momVal').textContent=parseFloat(this.value).toFixed(1)+'%'">
       <div class="field-hint">Entra solo su coin che stanno salendo di almeno +X% nell'ultima ora</div>
     </div>
     <div class="field">
-      <div class="field-label">Volume minimo universe <span id="volVal">$10M</span></div>
-      <input type="range" id="minVolume" min="10" max="500" value="10" step="10"
+      <div class="field-label">Volume minimo universe <span id="volVal">$0M</span></div>
+      <input type="range" id="minVolume" min="0" max="500" value="0" step="10"
         oninput="document.getElementById('volVal').textContent='$'+this.value+'M'">
       <div class="field-hint">Coin con volume inferiore vengono escluse</div>
     </div>
     <div class="field">
-      <div class="field-label">Cooldown post-uscita <span id="cdVal">1h</span></div>
-      <input type="range" id="cooldown" min="0" max="6" value="1" step="0.5"
+      <div class="field-label">Cooldown post-uscita <span id="cdVal">0h</span></div>
+      <input type="range" id="cooldown" min="0" max="6" value="0" step="0.5"
         oninput="document.getElementById('cdVal').textContent=this.value+'h'">
     </div>
 
@@ -732,13 +732,13 @@ function toggleTheme() {
 
 // Default values per reset
 const DEFAULTS = {
-  capital: 1000,
-  allocPct: 20,
-  sessionDuration: 8,
-  stopLoss: 3,
-  minMomentum: 1,
-  minVolume: 10,
-  cooldown: 1,
+  capital: '',
+  allocPct: 0,
+  sessionDuration: 0,
+  stopLoss: 0,
+  minMomentum: 0,
+  minVolume: 0,
+  cooldown: 0,
 };
 
 function lockConfig() {
@@ -766,21 +766,21 @@ function unlockConfig() {
 }
 
 function resetConfigToDefaults() {
-  document.getElementById('capital').value = DEFAULTS.capital;
-  document.getElementById('capitalDisplay').textContent = '$' + DEFAULTS.capital.toLocaleString();
-  document.getElementById('allocPct').value = DEFAULTS.allocPct;
-  document.getElementById('allocVal').textContent = DEFAULTS.allocPct + '%';
-  document.getElementById('sessionDuration').value = DEFAULTS.sessionDuration;
-  document.getElementById('sessionVal').textContent = DEFAULTS.sessionDuration + 'h';
-  document.getElementById('stopLoss').value = DEFAULTS.stopLoss;
-  document.getElementById('slVal').textContent = DEFAULTS.stopLoss + '%';
-  document.getElementById('minMomentum').value = DEFAULTS.minMomentum;
-  document.getElementById('momVal').textContent = DEFAULTS.minMomentum.toFixed(1) + '%';
-  document.getElementById('minVolume').value = DEFAULTS.minVolume;
-  document.getElementById('volVal').textContent = '$' + DEFAULTS.minVolume + 'M';
-  document.getElementById('cooldown').value = DEFAULTS.cooldown;
-  document.getElementById('cdVal').textContent = DEFAULTS.cooldown + 'h';
-  document.getElementById('allocHint').textContent = 'Max 5 posizioni · $' + (DEFAULTS.capital * DEFAULTS.allocPct / 100).toFixed(0) + ' per trade';
+  document.getElementById('capital').value = '';
+  document.getElementById('capitalDisplay').textContent = '$0';
+  document.getElementById('allocPct').value = 0;
+  document.getElementById('allocVal').textContent = '0%';
+  document.getElementById('sessionDuration').value = 0;
+  document.getElementById('sessionVal').textContent = '0h';
+  document.getElementById('stopLoss').value = 0;
+  document.getElementById('slVal').textContent = '0%';
+  document.getElementById('minMomentum').value = 0;
+  document.getElementById('momVal').textContent = '0.0%';
+  document.getElementById('minVolume').value = 0;
+  document.getElementById('volVal').textContent = '$0M';
+  document.getElementById('cooldown').value = 0;
+  document.getElementById('cdVal').textContent = '0h';
+  document.getElementById('allocHint').textContent = 'Imposta i parametri per la sessione';
   // reset modalita a simulazione
   document.getElementById('modeRealBtn').classList.remove('active-real');
   document.getElementById('modeSimBtn').classList.add('active-sim');
