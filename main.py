@@ -98,6 +98,18 @@ def unrealized_pnl():
 STABLES = {'USDT','USDC','BUSD','DAI','FDUSD','TUSD','USDP','GUSD','FRAX',
            'LUSD','SUSD','EUR','GBP','USD','USDD','USTC','PAX','CBBTC','WBTC'}
 
+# Coin con logo verificato — fallback finche non troviamo campo logo Coinbase
+LOGO_APPROVED = {
+    'BTC','ETH','SOL','BNB','XRP','ADA','AVAX','DOT','LINK','MATIC','UNI','NEAR',
+    'INJ','APT','ARB','OP','ATOM','DOGE','SHIB','LTC','TON','TRX','HBAR','VET',
+    'FIL','ALGO','ETC','AAVE','GRT','MKR','SNX','CRV','LDO','RUNE','FTM','ENJ',
+    'ENA','RENDER','RNDR','JUP','PYTH','SUI','SEI','TAO','WLD','PEPE','FLOKI',
+    'BONK','WIF','RAVE','CTSI','IOTX','NKN','DRIFT','XLM','SAND','MANA','AXS',
+    'CHZ','EGLD','THETA','ZEC','BAT','ZRX','COMP','YFI','SUSHI','SKL','ANKR',
+    'STORJ','OGN','RLC','LOOM','1INCH','ICP','FET','OCEAN','IMX','GRT','BLUR',
+    'ENS','TIA','DYDX','LRC','FLOW','MINA','APE','GALA','YFI','QNT','EGLD',
+}
+
 # Cache prodotti Coinbase — aggiornata ogni ora
 # sym -> {price, change24h, volume24h, logo_url}
 _coinbase_products: dict = {}
@@ -662,6 +674,15 @@ async def test_coinbase():
         return {"ok": True, "balances": balances}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+@app.get("/debug_product")
+async def debug_product():
+    """Mostra struttura grezza del prodotto BTC-USD da Coinbase"""
+    try:
+        result = await coinbase_request("GET", "/api/v3/brokerage/market/products/BTC-USD")
+        return result
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/debug_key")
 async def debug_key():
