@@ -1100,8 +1100,7 @@ function renderMarket() {
       <div class="mkt-row-main">
         <div class="mkt-coin">
           <div class="mkt-logo-wrap">
-            <img src="${getLogo(c.symbol)}" class="mkt-logo" onerror="this.onerror=null;this.src='';this.style.display='none';this.nextElementSibling.style.display='flex'">
-            <div class="mkt-icon-placeholder" style="display:none">${c.symbol[0]}</div>
+            <img src="${getLogo(c.symbol)}" class="mkt-logo" onerror="this.closest('.mkt-row').style.display='none'">
           </div>
           <div>
             <div class="mkt-name">${fullName}${isOpen?'<span class="mkt-in-badge">IN</span>':''}</div>
