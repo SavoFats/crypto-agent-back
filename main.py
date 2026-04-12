@@ -133,18 +133,35 @@ async def refresh_coinbase_products():
 async def fetch_prices():
     global _products_last_update
     try:
-        # Aggiorna lista prodotti ogni ora (o al primo avvio)
-        if time.time() - _products_last_update > 3600 or not _coinbase_products:
-            await refresh_coinbase_products()
+        # Aggiorna SEMPRE i prezzi da Coinbase ad ogni ciclo
+        result = await coinbase_request("GET", "/api/v3/brokerage/market/products?product_type=SPOT&limit=500")
+        products = result.get("products", [])
 
-        if not _coinbase_products:
-            print("Nessun prodotto Coinbase disponibile")
-            return
+        # Se la lista prodotti e vuota o scaduta, aggiorna anche il cache
+        if not products or time.time() - _products_last_update > 3600:
+            _products_last_update = time.time()
 
-        for sym, data in _coinbase_products.items():
-            price = data["price"]
-            change24h = data["change24h"]
-            vol_usd = data["volume24h"]
+        for p in products:
+            if p.get("quote_currency_id") != "USD":
+                continue
+            if p.get("status") != "online":
+                continue
+            sym = p.get("base_currency_id", "")
+            if not sym or not sym.isascii() or not sym.isalpha():
+                continue
+            if sym in STABLES:
+                continue
+            try:
+                price = float(p.get("price", 0) or 0)
+                change24h = float(p.get("price_percentage_change_24h", 0) or 0)
+                vol_usd = float(p.get("volume_24h", 0) or 0) * price
+            except:
+                continue
+            if price <= 0:
+                continue
+
+            # aggiorna cache prodotti
+            _coinbase_products[sym] = {"price": price, "change24h": change24h, "volume24h": vol_usd}
 
             if sym not in market_data:
                 market_data[sym] = {
@@ -157,7 +174,7 @@ async def fetch_prices():
                 hist.pop(0)
             change1h = (
                 (price - hist[0]) / hist[0] * 100
-                if len(hist) >= 10 else change24h * 0.08
+                if len(hist) >= 3 else change24h * 0.04
             )
             market_data[sym]["price"] = price
             market_data[sym]["change1h"] = change1h
