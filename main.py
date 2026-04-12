@@ -109,6 +109,10 @@ async def fetch_prices():
             sym = pair[:-4]  # es. BTCUSDT -> BTC
             if not sym.isascii() or not sym.isalpha():
                 continue
+            # escludi stablecoin
+            STABLES = {'USDT','USDC','BUSD','DAI','FDUSD','TUSD','TRU','USDP','GUSD','FRAX','LUSD','SUSD','EURS','EUR','GBP','USD','USDD','USTC','USDJ','VAI','PAX'}
+            if sym in STABLES:
+                continue
             price = float(t["lastPrice"])
             change24h = float(t["priceChangePercent"])
 
