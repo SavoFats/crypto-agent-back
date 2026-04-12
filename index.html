@@ -361,6 +361,9 @@ input[type=number]:disabled {
   justify-content: center; font-weight: 700; font-size: 12px;
   color: var(--text2); flex-shrink: 0;
 }
+.mkt-logo-wrap { position: relative; width: 34px; height: 34px; flex-shrink: 0; }
+.mkt-name { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.mkt-sym-sub { font-size: 11px; color: var(--text3); margin-top: 2px; font-weight: 500; }
 .mkt-sym { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
 .mkt-in-badge {
   font-size: 9px; background: var(--blue); color: #fff;
@@ -599,8 +602,31 @@ input[type=number]:disabled {
 
 <script>
 const API = 'https://crypto-agent-back-production.up.railway.app';
+// mappa nomi completi
+const COIN_NAMES = {
+  BTC:'Bitcoin', ETH:'Ethereum', SOL:'Solana', BNB:'BNB', XRP:'XRP',
+  ADA:'Cardano', AVAX:'Avalanche', DOT:'Polkadot', LINK:'Chainlink',
+  MATIC:'Polygon', UNI:'Uniswap', NEAR:'NEAR', INJ:'Injective',
+  APT:'Aptos', ARB:'Arbitrum', OP:'Optimism', ATOM:'Cosmos',
+  DOGE:'Dogecoin', SHIB:'Shiba Inu', LTC:'Litecoin', TON:'Toncoin',
+  TRX:'TRON', HBAR:'Hedera', VET:'VeChain', FIL:'Filecoin',
+  ALGO:'Algorand', ICP:'Internet Computer', ETC:'Ethereum Classic',
+  AAVE:'Aave', GRT:'The Graph', MKR:'Maker', SNX:'Synthetix',
+  CRV:'Curve', LDO:'Lido', RUNE:'THORChain', FTM:'Fantom',
+  ENJ:'Enjin', ENA:'Ethena', EUR:'Euro', LTC:'Litecoin',
+  TRU:'TrueUSD', WLD:'Worldcoin', GIGGLE:'Giggle', FET:'Fetch.ai',
+  PEPE:'Pepe', FLOKI:'Floki', BONK:'Bonk', WIF:'dogwifhat',
+  RENDER:'Render', RNDR:'Render', JUP:'Jupiter', PYTH:'Pyth',
+  SUI:'Sui', SEI:'Sei', TAO:'Bittensor', JASMY:'JasmyCoin',
+};
+
+function getCoinName(sym) {
+  return COIN_NAMES[sym] || sym;
+}
+
 function getLogo(sym) {
-  return 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/128/color/' + sym.toLowerCase() + '.png';
+  // coincap ha ottima copertura
+  return 'https://assets.coincap.io/assets/icons/' + sym.toLowerCase() + '@2x.png';
 }
 
 let S = { running:false, capital:0, currentCapital:0, pnl:0, pct:0, tradeCount:0, winRate:0, positions:[], pnlHistory:[], log:[], remainingMs:0 };
@@ -1066,34 +1092,35 @@ function renderMarket() {
     const chg24 = c.change24h || 0, chg1h = c.change1h || 0, vol = c.volume24h || 0;
     const c24 = chg24 >= 0 ? 'var(--green)' : 'var(--red)';
     const c1h = chg1h >= 0 ? 'var(--green)' : 'var(--red)';
-    const logo = getLogo(c.symbol);
-    const img = logo
-      ? `<img src="${logo}" class="mkt-logo" onerror="this.style.display='none'">`
-      : `<div class="mkt-icon-placeholder">${c.symbol[0]}</div>`;
-    const volBar = Math.round((vol/maxVol)*100);
-    const chgBar = Math.round((Math.abs(chg24)/maxAbsChg)*100);
     const isOpen = (window._lastStatus?.positions||[]).some(p => p.symbol === c.symbol);
     const bg24 = chg24>=0 ? 'rgba(5,193,104,0.12)' : 'rgba(246,70,93,0.12)';
-    const bg1h = 'rgba(138,143,168,0.1)';
+    const bg1h = 'rgba(138,143,168,0.08)';
+    const fullName = getCoinName(c.symbol);
     return `<div class="mkt-row${isOpen?' mkt-row-open':''}">
       <div class="mkt-row-main">
-        <div class="mkt-coin">${img}
+        <div class="mkt-coin">
+          <div class="mkt-logo-wrap">
+            <img src="${getLogo(c.symbol)}" class="mkt-logo" onerror="this.onerror=null;this.src='';this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div class="mkt-icon-placeholder" style="display:none">${c.symbol[0]}</div>
+          </div>
           <div>
-            <div class="mkt-sym">${c.symbol}${isOpen?'<span class="mkt-in-badge">IN</span>':''}</div>
-            <div class="mkt-vol">Vol $${fmtVol(vol)}</div>
+            <div class="mkt-name">${fullName}${isOpen?'<span class="mkt-in-badge">IN</span>':''}</div>
+            <div class="mkt-sym-sub">${c.symbol} &middot; Vol $${fmtVol(vol)}</div>
           </div>
         </div>
         <div class="mkt-right">
           <div class="mkt-price-val">${fmtPrice(c.price)}</div>
-          <div style="display:flex;gap:6px;justify-content:flex-end">
-            <div class="mkt-chg-pill" style="background:${bg24};color:${c24}">${chg24>=0?'+':''}${chg24.toFixed(2)}%</div>
-            <div class="mkt-chg-pill" style="background:${bg1h};color:${c1h}">${chg1h>=0?'+':''}${chg1h.toFixed(2)}% 1h</div>
+          <div style="display:flex;gap:5px;justify-content:flex-end;margin-top:5px">
+            <div style="text-align:center">
+              <div style="font-size:9px;color:var(--text3);font-weight:600;margin-bottom:2px">24H</div>
+              <div class="mkt-chg-pill" style="background:${bg24};color:${c24}">${chg24>=0?'+':''}${chg24.toFixed(2)}%</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:9px;color:var(--text3);font-weight:600;margin-bottom:2px">1H</div>
+              <div class="mkt-chg-pill" style="background:${bg1h};color:${c1h}">${chg1h>=0?'+':''}${chg1h.toFixed(2)}%</div>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="mkt-bars">
-        <div class="mkt-bar-row"><span>Vol</span><div class="mkt-bar-bg"><div class="mkt-bar-fill" style="width:${volBar}%;background:var(--text3)"></div></div></div>
-        <div class="mkt-bar-row"><span>Mov</span><div class="mkt-bar-bg"><div class="mkt-bar-fill" style="width:${chgBar}%;background:${c24}"></div></div></div>
       </div>
     </div>`;
   }).join('');
