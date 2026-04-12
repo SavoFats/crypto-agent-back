@@ -442,15 +442,15 @@ async def scan_and_trade():
         reverse=True
     )
 
-    min_mom = cfg.get("minMomentum", 0.05)
+    min_mom = cfg.get("minMomentum", 0.0)
     candidates = [
         d for d in ranked
         if d.get("change1h", 0) >= min_mom   # momentum ultima ora (configurabile)
-        and d["change24h"] > 0               # trend 24h positivo
     ]
 
+    top3_detail = [(d["symbol"], round(d["change24h"],2), round(d.get("change1h",0),2)) for d in ranked[:3]]
     add_log("info", "SCAN",
-        f"Top3: {[(d['symbol'], round(d['change24h'],2)) for d in ranked[:3]]} | "
+        f"Top3 (24h,1h): {top3_detail} | "
         f"Candidati: {len(candidates)} | Slot: {slots} | Universe: {len(prices_ok)} | BTC1h: {btc_1h:+.2f}%"
     )
 
