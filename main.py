@@ -123,7 +123,7 @@ async def refresh_coinbase_products():
         products = result.get("products", [])
         new_products = {}
         for p in products:
-            if p.get("quote_currency_id") != "USD":
+            if p.get("quote_currency_id") not in ("USD", "USDC"):
                 continue
             if p.get("status") != "online":
                 continue
@@ -290,7 +290,7 @@ async def enter_position(sym_data: dict):
         try:
             # calcola quantita' coin da comprare
             qty = round(size / price, 8)
-            product_id = f"{sym}-USD"
+            product_id = f"{sym}-USDC"
             body = {
                 "client_order_id": f"ca-{sym}-{int(time.time())}",
                 "product_id": product_id,
@@ -359,7 +359,7 @@ async def exit_position(pos: dict, reason: str):
             else:
                 body = {
                     "client_order_id": f"ca-exit-{sym}-{int(time.time())}",
-                    "product_id": f"{sym}-USD",
+                    "product_id": f"{sym}-USDC",
                     "side": "SELL",
                     "order_configuration": {
                         "market_market_ioc": {
@@ -681,13 +681,13 @@ async def test_coinbase():
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-@app.get("/test_order_ton")
-async def test_order_ton():
+@app.get("/test_order_blur")
+async def test_order_blur():
     """Testa un ordine minimo su TON-USD e mostra risposta completa"""
     try:
         body = {
             "client_order_id": f"ca-test-{int(time.time())}",
-            "product_id": "TON-USD",
+            "product_id": "BLUR-USDC",
             "side": "BUY",
             "order_configuration": {
                 "market_market_ioc": {
@@ -704,7 +704,7 @@ async def test_order_ton():
 async def debug_product():
     """Mostra struttura grezza del prodotto BTC-USD da Coinbase"""
     try:
-        result = await coinbase_request("GET", "/api/v3/brokerage/market/products/BTC-USD")
+        result = await coinbase_request("GET", "/api/v3/brokerage/market/products/BTC-USDC")
         return result
     except Exception as e:
         return {"error": str(e)}
