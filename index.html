@@ -437,14 +437,20 @@ input[type=number]:disabled {
 
     <div class="section-label">Capitale</div>
     <div class="field">
-      <div class="field-label">Importo <span id="capitalDisplay">$1,000</span></div>
-      <input type="number" id="capital" value="1000" min="10" inputmode="decimal"
-        oninput="document.getElementById('capitalDisplay').textContent='$'+parseFloat(this.value||0).toLocaleString()">
+      <div class="field-label">Saldo totale disponibile</div>
+      <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;font-size:16px;font-weight:700;color:var(--text3)" id="totalBalanceDisplay">--</div>
+      <div class="field-hint">Aggiornato in tempo reale da Coinbase / simulato</div>
+    </div>
+    <div class="field">
+      <div class="field-label">Capitale da tradare <span id="capitalDisplay" style="color:var(--blue)">$0</span></div>
+      <input type="number" id="capital" value="" min="1" step="0.5" inputmode="decimal" placeholder="Es. 8.00"
+        oninput="onCapitalInput()">
+      <div class="field-hint" id="capitalHint">Inserisci quanto vuoi mettere a rischio in questa sessione</div>
     </div>
     <div class="field">
       <div class="field-label">Allocazione per trade <span id="allocVal">20%</span></div>
       <input type="range" id="allocPct" min="5" max="100" value="20" step="5" oninput="updateAlloc()">
-      <div class="field-hint" id="allocHint">Max 5 posizioni contemporanee</div>
+      <div class="field-hint" id="allocHint">Max 5 posizioni · $0 per trade</div>
     </div>
     <div class="field">
       <div class="field-label">Durata sessione <span id="sessionVal">8h</span></div>
@@ -593,25 +599,9 @@ input[type=number]:disabled {
 
 <script>
 const API = 'https://crypto-agent-back-production.up.railway.app';
-const LOGOS = {
-  BTC:'https://assets.coingecko.com/coins/images/1/thumb/bitcoin.png',
-  ETH:'https://assets.coingecko.com/coins/images/279/thumb/ethereum.png',
-  SOL:'https://assets.coingecko.com/coins/images/4128/thumb/solana.png',
-  BNB:'https://assets.coingecko.com/coins/images/825/thumb/bnb-icon2_2x.png',
-  XRP:'https://assets.coingecko.com/coins/images/44/thumb/xrp-symbol-white-128.png',
-  ADA:'https://assets.coingecko.com/coins/images/975/thumb/cardano.png',
-  AVAX:'https://assets.coingecko.com/coins/images/12559/thumb/Avalanche_Circle_RedWhite_Trans.png',
-  DOT:'https://assets.coingecko.com/coins/images/12171/thumb/polkadot.png',
-  LINK:'https://assets.coingecko.com/coins/images/877/thumb/chainlink-new-logo.png',
-  MATIC:'https://assets.coingecko.com/coins/images/4713/thumb/matic-token-icon.png',
-  UNI:'https://assets.coingecko.com/coins/images/12504/thumb/uniswap-uni.png',
-  NEAR:'https://assets.coingecko.com/coins/images/10365/thumb/near_icon.png',
-  INJ:'https://assets.coingecko.com/coins/images/12882/thumb/Secondary_Symbol.png',
-  APT:'https://assets.coingecko.com/coins/images/26455/thumb/aptos_round.png',
-  ARB:'https://assets.coingecko.com/coins/images/16547/thumb/photo_2023-03-29_21.47.00.jpeg',
-  OP:'https://assets.coingecko.com/coins/images/25244/thumb/Optimism.png',
-  ATOM:'https://assets.coingecko.com/coins/images/1481/thumb/cosmos_hub.png',
-};
+function getLogo(sym) {
+  return 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons/128/color/' + sym.toLowerCase() + '.png';
+}
 
 let S = { running:false, capital:0, currentCapital:0, pnl:0, pct:0, tradeCount:0, winRate:0, positions:[], pnlHistory:[], log:[], remainingMs:0 };
 let trades = [];
@@ -641,7 +631,27 @@ function updateAlloc() {
   const v = parseInt(document.getElementById('allocPct').value);
   document.getElementById('allocVal').textContent = v + '%';
   const max = Math.floor(100 / v);
-  document.getElementById('allocHint').textContent = 'Max ' + max + ' posizioni contemporanee';
+  const budget = parseFloat(document.getElementById('capital').value) || 0;
+  const perTrade = (budget * v / 100).toFixed(2);
+  document.getElementById('allocHint').textContent = 'Max ' + max + ' posizioni · $' + perTrade + ' per trade';
+}
+
+function onCapitalInput() {
+  const val = parseFloat(document.getElementById('capital').value) || 0;
+  const total = parseFloat(document.getElementById('capital').dataset.total || 0);
+  document.getElementById('capitalDisplay').textContent = '$' + val.toFixed(2);
+  // warning se supera il 98% del totale
+  const hint = document.getElementById('capitalHint');
+  if (total > 0 && val > total * 0.98) {
+    document.getElementById('capital').value = (total * 0.98).toFixed(2);
+    document.getElementById('capitalDisplay').textContent = '$' + (total * 0.98).toFixed(2);
+    hint.textContent = 'Ridotto al 98% del saldo — il 2% e riservato alle commissioni';
+    hint.style.color = 'var(--yellow)';
+  } else {
+    hint.textContent = 'Inserisci quanto vuoi mettere a rischio in questa sessione';
+    hint.style.color = '';
+  }
+  updateAlloc();
 }
 
 let _realMode = false;
@@ -659,26 +669,31 @@ async function setMode(real) {
     realBtn.classList.add('active-real');
     hint.textContent = 'Recupero saldo Coinbase...';
     hint.style.color = 'var(--yellow)';
-    capitalInput.disabled = true;
+    capitalInput.disabled = false;
     try {
       const r = await fetch(API + '/test_coinbase');
       const d = await r.json();
       if (d.ok) {
         const usdc = d.balances.find(b => b.currency === 'USDC');
         const bal = usdc ? parseFloat(usdc.available) : 0;
-        capitalInput.value = bal.toFixed(2);
-        document.getElementById('capitalDisplay').textContent = '$' + bal.toFixed(2);
+        const suggested = parseFloat((bal * 0.98).toFixed(2));
+        // mostra saldo totale in readonly
+        document.getElementById('totalBalanceDisplay').textContent = '$' + bal.toFixed(2) + ' USDC disponibili';
+        document.getElementById('totalBalanceDisplay').style.color = 'var(--green)';
+        // suggerisci 98% come budget
+        capitalInput.value = suggested;
+        capitalInput.dataset.total = bal;
+        document.getElementById('capitalDisplay').textContent = '$' + suggested;
         hint.textContent = 'Saldo USDC: $' + bal.toFixed(2) + ' — ordini reali su Coinbase';
         hint.style.color = 'var(--red)';
+        updateAlloc();
       } else {
         hint.textContent = 'Errore Coinbase: ' + (d.error || 'sconosciuto');
         hint.style.color = 'var(--red)';
-        capitalInput.disabled = false;
       }
     } catch(e) {
       hint.textContent = 'Errore: ' + e.message;
       hint.style.color = 'var(--red)';
-      capitalInput.disabled = false;
     }
   } else {
     realBtn.classList.remove('active-real');
@@ -687,13 +702,27 @@ async function setMode(real) {
     hint.style.color = '';
     capitalInput.disabled = false;
     capitalInput.value = 1000;
+    capitalInput.dataset.total = 0;
     document.getElementById('capitalDisplay').textContent = '$1,000';
+    document.getElementById('totalBalanceDisplay').textContent = 'Modalita simulazione';
+    document.getElementById('totalBalanceDisplay').style.color = '';
+    updateAlloc();
   }
 }
 
 async function startAgent() {
+  const capitalVal = parseFloat(document.getElementById('capital').value);
+  if (!capitalVal || capitalVal <= 0) {
+    alert('Inserisci il capitale da tradare prima di avviare.');
+    return;
+  }
+  const totalBal = parseFloat(document.getElementById('capital').dataset.total || 0);
+  if (totalBal > 0 && capitalVal > totalBal * 0.98) {
+    alert('Il capitale da tradare supera il 98% del saldo disponibile. Riduci per coprire le commissioni.');
+    return;
+  }
   const cfg = {
-    capital:         parseFloat(document.getElementById('capital').value),
+    capital:         capitalVal,
     allocPct:        parseInt(document.getElementById('allocPct').value) / 100,
     stopLoss:        parseFloat(document.getElementById('stopLoss').value) / 100,
     minMomentum:     parseFloat(document.getElementById('minMomentum').value),
@@ -713,7 +742,21 @@ async function startAgent() {
     document.getElementById('startBtn').disabled = true;
     document.getElementById('stopBtn').disabled = false;
     showTab('monitor', document.querySelectorAll('.tab')[1]);
-    startPolling();
+    // all avvio controlla se c e una sessione attiva
+(async function() {
+  try {
+    const r = await fetch(API + '/status');
+    const d = await r.json();
+    if (d.running) {
+      S = d;
+      window._lastStatus = d;
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('stopBtn').disabled = false;
+      showTab('monitor', document.querySelectorAll('.tab')[1]);
+    }
+  } catch(e) {}
+  startPolling();
+})();
   } catch(e) { alert('Errore connessione: ' + e.message); }
 }
 
@@ -831,7 +874,7 @@ function renderPositions() {
     const pct = (p.currentPrice - p.entryPrice) / p.entryPrice * 100;
     const isPos = pnl >= 0;
     const color = isPos ? 'var(--green)' : 'var(--red)';
-    const logo = LOGOS[p.symbol];
+    const logo = getLogo(p.symbol);
     const img = logo
       ? `<img src="${logo}" class="pos-logo" onerror="this.style.display='none'">`
       : `<div class="pos-icon">${p.symbol[0]}</div>`;
@@ -899,7 +942,7 @@ function renderStorico() {
     return `<div class="trade-row ${isWin?'win':'loss'}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:10px">
-          ${LOGOS[t.symbol] ? '<img src="'+LOGOS[t.symbol]+'" style="width:28px;height:28px;border-radius:50%">' : ''}
+          ${'<img src="'+getLogo(t.symbol)+'" style="width:28px;height:28px;border-radius:50%" onerror="this.style.display=\'none\'">' }
           <div>
             <div style="font-weight:700;font-size:15px">${t.symbol}</div>
             <div style="font-size:11px;color:var(--text3);font-weight:500">${ds} &middot; ${t.durationMin} min</div>
@@ -1023,7 +1066,7 @@ function renderMarket() {
     const chg24 = c.change24h || 0, chg1h = c.change1h || 0, vol = c.volume24h || 0;
     const c24 = chg24 >= 0 ? 'var(--green)' : 'var(--red)';
     const c1h = chg1h >= 0 ? 'var(--green)' : 'var(--red)';
-    const logo = LOGOS[c.symbol];
+    const logo = getLogo(c.symbol);
     const img = logo
       ? `<img src="${logo}" class="mkt-logo" onerror="this.style.display='none'">`
       : `<div class="mkt-icon-placeholder">${c.symbol[0]}</div>`;
