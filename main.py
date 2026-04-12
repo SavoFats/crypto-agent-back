@@ -612,6 +612,23 @@ async def test_coinbase():
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+@app.get("/debug_products")
+async def debug_products():
+    """Debug: mostra i prodotti USD tradabili su Coinbase Advanced"""
+    if not COINBASE_API_KEY:
+        return {"error": "CB_KEY non configurata"}
+    try:
+        result = await coinbase_request("GET", "/api/v3/brokerage/market/products?product_type=SPOT&limit=500")
+        products = result.get("products", [])
+        usd = [
+            {"sym": p.get("base_currency_id"), "status": p.get("status"), "price": p.get("price")}
+            for p in products
+            if p.get("quote_currency_id") == "USD"
+        ]
+        return {"total": len(usd), "products": usd}
+    except Exception as e:
+        return {"error": str(e)}
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port)
