@@ -465,10 +465,12 @@ async def enter_position(state: dict, sym_data: dict):
             if result.get("success") != True:
                 err = result.get("error_response", {})
                 err_msg = err.get("message", str(result))
+                err_str = str(result).lower()
                 add_log(state, "info", "ERRORE", f"Ordine {sym} fallito: {err_msg}")
-                if "not available" in err_msg:
+                # Cooldown automatico per errori che indicano coin non tradabile temporaneamente
+                if any(x in err_str for x in ["not available", "cancel only", "permission_denied", "orderbook", "suspended"]):
                     state["cooldowns"][sym] = (datetime.now().timestamp() + 3600) * 1000
-                    add_log(state, "info", "ESCLUSA", f"{sym} non disponibile — esclusa per 1h")
+                    add_log(state, "info", "ESCLUSA", f"{sym} esclusa per 1h — {err_msg[:60]}")
                 return
             filled      = result.get("success_response", {})
             actual_price = float(filled.get("average_filled_price", price)) or price
