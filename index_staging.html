@@ -172,6 +172,13 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 .mkt-right { text-align:right; }
 .mkt-price-val { font-size:15px; font-weight:700; margin-bottom:4px; font-variant-numeric:tabular-nums; }
 .mkt-chg-pill { font-size:11px; font-weight:700; padding:3px 7px; border-radius:6px; display:inline-block; }
+.ema-dots { display:flex; align-items:center; gap:6px; margin-top:7px; }
+.ema-dot-wrap { display:flex; align-items:center; gap:3px; }
+.ema-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; transition:all 0.3s; }
+.ema-dot.on { background:var(--green); box-shadow:0 0 6px rgba(5,193,104,0.6); animation:pulse 2s infinite; }
+.ema-dot.off { background:var(--text3); opacity:0.4; }
+.ema-dot.signal { background:var(--blue); box-shadow:0 0 8px var(--blue-glow); animation:pulse 1s infinite; }
+.ema-dot-label { font-size:9px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.03em; }
 
 .filter-row { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
 .filter-btn { font-size:12px; font-weight:600; padding:6px 12px; border-radius:20px; border:1.5px solid var(--border); background:var(--surface2); color:var(--text3); cursor:pointer; font-family:var(--sans); transition:all 0.15s; }
@@ -1198,6 +1205,31 @@ function renderMarket() {
     const isOpen=(window._lastStatus?.positions||[]).some(p=>p.symbol===c.symbol);
     const bg24=chg24>=0?'rgba(5,193,104,0.12)':'rgba(246,70,93,0.12)';
     const fullName=getCoinName(c.symbol);
+
+    // EMA dots
+    const ema = c.ema;
+    let emaDots = '';
+    if (ema) {
+      const dot = (on, label) =>
+        `<div class="ema-dot-wrap">
+          <div class="ema-dot ${on?'on':'off'}"></div>
+          <span class="ema-dot-label">${label}</span>
+        </div>`;
+      const signalDot = ema.signal
+        ? `<div class="ema-dot-wrap" style="margin-left:2px">
+             <div class="ema-dot signal"></div>
+             <span class="ema-dot-label" style="color:var(--blue)">IN</span>
+           </div>`
+        : '';
+      emaDots = `<div class="ema-dots">
+        ${dot(ema.trend,'trend')}
+        ${dot(ema.pullback,'pull')}
+        ${dot(ema.volume,'vol')}
+        ${dot(ema.stop,'R')}
+        ${signalDot}
+      </div>`;
+    }
+
     return `<div class="mkt-row${isOpen?' mkt-row-open':''}">
       <div class="mkt-row-main">
         <div class="mkt-coin">
@@ -1208,6 +1240,7 @@ function renderMarket() {
           <div>
             <div class="mkt-name">${fullName}${isOpen?'<span class="mkt-in-badge">IN</span>':''}</div>
             <div class="mkt-sym-sub">${c.symbol} &middot; Vol $${fmtVol(vol)}</div>
+            ${emaDots}
           </div>
         </div>
         <div class="mkt-right">
