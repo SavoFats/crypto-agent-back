@@ -169,14 +169,36 @@ async def fetch_candles_for_symbol(sym: str, client: httpx.AsyncClient) -> dict 
 
         closes5  = [float(k[4]) for k in klines5]
         closes15 = [float(k[4]) for k in klines15]
+        volumes5 = [float(k[5]) for k in klines5]
+        lows5    = [float(k[3]) for k in klines5]
+
+        # ATR 5m: media True Range sugli ultimi 14 periodi
+        trs = []
+        for i in range(1, len(klines5)):
+            h = float(klines5[i][2])
+            l = float(klines5[i][3])
+            pc = float(klines5[i-1][4])
+            trs.append(max(h - l, abs(h - pc), abs(l - pc)))
+        atr_5m = sum(trs[-14:]) / 14 if len(trs) >= 14 else 0.0
+
+        # Minimo delle ultime 3 candele 5m (per stop contestuale)
+        pullback_low_5m = min(lows5[-3:]) if len(lows5) >= 3 else lows5[-1]
+
+        # Volume medio ultime 20 candele 5m
+        vol_avg_20 = sum(volumes5[-20:]) / 20 if len(volumes5) >= 20 else 0.0
+        vol_last   = volumes5[-1]
 
         return {
-            "ema20_5m":      calc_ema(closes5,  20),
-            "ema50_5m":      calc_ema(closes5,  50),
-            "ema20_15m":     calc_ema(closes15, 20),
-            "ema50_15m":     calc_ema(closes15, 50),
-            "last_close_5m": closes5[-1],
-            "updated_at":    time.time(),
+            "ema20_5m":         calc_ema(closes5,  20),
+            "ema50_5m":         calc_ema(closes5,  50),
+            "ema20_15m":        calc_ema(closes15, 20),
+            "ema50_15m":        calc_ema(closes15, 50),
+            "last_close_5m":    closes5[-1],
+            "atr_5m":           atr_5m,
+            "pullback_low_5m":  pullback_low_5m,
+            "vol_avg_20":       vol_avg_20,
+            "vol_last":         vol_last,
+            "updated_at":       time.time(),
         }
     except Exception as e:
         print(f"Candle error {sym}: {e}")
@@ -213,56 +235,78 @@ async def fetch_all_candles():
     _candles_last_update = time.time()
     print(f"Candele aggiornate: {updated}/{len(syms)}")
 
-def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0.015) -> dict:
+def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0.015,
+                   vol_multiplier: float = 1.2, max_stop_pct: float = 0.025) -> dict:
     """
-    Analizza il segnale EMA per una coin.
-    Restituisce: {
-        "trend_ok": bool,       # EMA20 > EMA50 su 15min
-        "pullback_ok": bool,    # prezzo vicino a EMA20 su 5min
-        "bounce_ok": bool,      # ultima candela 5min chiusa sopra EMA20
-        "signal": bool,         # tutti e tre veri
-        "reason": str           # descrizione leggibile
-    }
+    Analizza il segnale EMA + volume per una coin.
+    Restituisce segnale, stop price contestuale e R (rischio per unità).
     """
     cd = candle_data.get(sym)
     if not cd:
-        return {"trend_ok": False, "pullback_ok": False, "bounce_ok": False,
-                "signal": False, "reason": "no candle data"}
+        return {"signal": False, "reason": "no candle data", "stop_price": 0.0, "R": 0.0}
 
-    ema20_15m = cd["ema20_15m"]
-    ema50_15m = cd["ema50_15m"]
-    ema20_5m  = cd["ema20_5m"]
-    last_close_5m = cd["last_close_5m"]
+    ema20_15m       = cd["ema20_15m"]
+    ema50_15m       = cd["ema50_15m"]
+    ema20_5m        = cd["ema20_5m"]
+    last_close_5m   = cd["last_close_5m"]
+    atr_5m          = cd["atr_5m"]
+    pullback_low_5m = cd["pullback_low_5m"]
+    vol_avg_20      = cd["vol_avg_20"]
+    vol_last        = cd["vol_last"]
 
     # 1. Trend rialzista su 15min
     trend_ok = ema20_15m > ema50_15m
 
-    # 2. Prezzo attuale vicino a EMA20 su 5min (pullback)
-    #    "vicino" = entro pullback_tolerance sopra o sotto EMA20
+    # 2. Prezzo vicino a EMA20 su 5min (pullback)
     dist_from_ema20 = abs(current_price - ema20_5m) / ema20_5m
     pullback_ok = dist_from_ema20 <= pullback_tolerance
 
-    # 3. Ultima candela 5min chiusa sopra EMA20 (rimbalzo confermato)
+    # 3. Ultima candela 5min chiusa sopra EMA20 (rimbalzo)
     bounce_ok = last_close_5m > ema20_5m
 
-    signal = trend_ok and pullback_ok and bounce_ok
+    # 4. Volume candela corrente >= media * coefficiente
+    vol_ok = (vol_avg_20 > 0) and (vol_last >= vol_avg_20 * vol_multiplier)
+
+    # Stop contestuale: il più basso tra minimo pullback e entry - 1xATR
+    # (calcolato su current_price come proxy entry)
+    stop_from_low = pullback_low_5m
+    stop_from_atr = current_price - atr_5m if atr_5m > 0 else 0.0
+    stop_price    = min(stop_from_low, stop_from_atr) if stop_from_atr > 0 else stop_from_low
+
+    # R = distanza percentuale entry → stop
+    R = (current_price - stop_price) / current_price if stop_price > 0 else 0.0
+
+    # Se stop troppo largo rispetto al limite configurato → no trade
+    stop_ok = 0 < R <= max_stop_pct
+
+    signal = trend_ok and pullback_ok and bounce_ok and vol_ok and stop_ok
 
     if not trend_ok:
         reason = f"no trend (EMA20 15m {ema20_15m:.4f} < EMA50 15m {ema50_15m:.4f})"
     elif not pullback_ok:
-        dist_pct = dist_from_ema20 * 100
-        reason = f"no pullback (dist da EMA20: {dist_pct:.1f}% > {pullback_tolerance*100:.1f}%)"
+        reason = f"no pullback (dist EMA20: {dist_from_ema20*100:.1f}% > {pullback_tolerance*100:.1f}%)"
     elif not bounce_ok:
         reason = f"no rimbalzo (close 5m {last_close_5m:.4f} < EMA20 {ema20_5m:.4f})"
+    elif not vol_ok:
+        ratio = vol_last / vol_avg_20 if vol_avg_20 > 0 else 0
+        reason = f"volume basso ({ratio:.1f}x media, richiesto {vol_multiplier}x)"
+    elif not stop_ok:
+        reason = f"stop troppo largo ({R*100:.1f}% > {max_stop_pct*100:.1f}%)" if R > 0 else "stop non calcolabile"
     else:
-        reason = f"OK (EMA20/50 15m: {ema20_15m:.4f}/{ema50_15m:.4f}, dist EMA20: {dist_from_ema20*100:.2f}%)"
+        reason = (f"OK | EMA20/50 15m: {ema20_15m:.4f}/{ema50_15m:.4f} | "
+                  f"dist EMA20: {dist_from_ema20*100:.2f}% | "
+                  f"vol: {vol_last/vol_avg_20:.1f}x | R: {R*100:.2f}%")
 
     return {
-        "trend_ok": trend_ok,
+        "signal":      signal,
+        "reason":      reason,
+        "stop_price":  round(stop_price, 8),
+        "R":           round(R, 6),
+        "trend_ok":    trend_ok,
         "pullback_ok": pullback_ok,
-        "bounce_ok": bounce_ok,
-        "signal": signal,
-        "reason": reason,
+        "bounce_ok":   bounce_ok,
+        "vol_ok":      vol_ok,
+        "stop_ok":     stop_ok,
     }
 
 # ── rest of market data ───────────────────────────────────────────────────────
@@ -358,6 +402,7 @@ def make_session() -> dict:
         "sessionDuration": 0, "config": {}, "cooldowns": {},
         "tradeCount": 0, "wins": 0, "trades": [], "log": [],
         "cb_key": "", "cb_secret": "",
+        "consecutiveLosses": 0,
     }
 
 def get_session(user_id: int) -> dict:
@@ -393,7 +438,18 @@ async def enter_position(state: dict, sym_data: dict):
     if size < 1:
         return
 
-    sl_pct = cfg.get("stopLoss", 0.03)
+    # Stop price: dalla funzione EMA signal (contestuale ATR/low)
+    # Fallback: stop fisso da config
+    stop_price = sym_data.get("stop_price", 0.0)
+    if stop_price <= 0 or stop_price >= price:
+        fallback_sl = cfg.get("stopLoss", 0.01)
+        stop_price  = price * (1 - fallback_sl)
+
+    R_pct = (price - stop_price) / price  # rischio in % per questa posizione
+
+    # TP1 = entry + 1R, TP2 = entry + 1.5R
+    tp1_price = price * (1 + R_pct)
+    tp2_price = price * (1 + R_pct * 1.5)
 
     if is_real:
         cb_key    = state.get("cb_key", "") or _ENV_CB_KEY
@@ -414,32 +470,60 @@ async def enter_position(state: dict, sym_data: dict):
                     state["cooldowns"][sym] = (datetime.now().timestamp() + 3600) * 1000
                     add_log(state, "info", "ESCLUSA", f"{sym} non disponibile — esclusa per 1h")
                 return
-            filled = result.get("success_response", {})
+            filled      = result.get("success_response", {})
             actual_price = float(filled.get("average_filled_price", price)) or price
-            add_log(state, "buy", "ACQUISTO REALE", f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | SL: {sl_pct*100:.1f}%")
-            await send_telegram("ACQUISTO REALE\n" + sym + " @ $" + f"{actual_price:.4f}" + "\nSize: $" + f"{size:.2f}")
+            # Ricalcola stop e TP sull'actual price
+            stop_price  = actual_price * (1 - R_pct)
+            tp1_price   = actual_price * (1 + R_pct)
+            tp2_price   = actual_price * (1 + R_pct * 1.5)
+            add_log(state, "buy", "ACQUISTO REALE",
+                f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | "
+                f"SL: ${stop_price:.4f} | TP1: ${tp1_price:.4f} | TP2: ${tp2_price:.4f} | R: {R_pct*100:.2f}%")
+            await send_telegram(
+                "ACQUISTO REALE\n" + sym + " @ $" + f"{actual_price:.4f}" +
+                "\nSize: $" + f"{size:.2f}" +
+                "\nSL: $" + f"{stop_price:.4f}" +
+                "\nTP1: $" + f"{tp1_price:.4f}" + " | TP2: $" + f"{tp2_price:.4f}"
+            )
         except Exception as e:
             add_log(state, "info", "ERRORE", f"Coinbase error: {e}")
             return
     else:
         actual_price = price
-        add_log(state, "buy", "ACQUISTO SIM", f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | SL: {sl_pct*100:.1f}%")
+        add_log(state, "buy", "ACQUISTO SIM",
+            f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | "
+            f"SL: ${stop_price:.4f} | TP1: ${tp1_price:.4f} | TP2: ${tp2_price:.4f} | R: {R_pct*100:.2f}%")
 
     state["currentCapital"] -= size
     pos = {
-        "symbol": sym, "icon": sym_data["icon"],
-        "entryPrice": actual_price, "currentPrice": actual_price,
-        "highPrice": actual_price, "size": size,
-        "entryTime": datetime.now().isoformat(),
-        "stopPrice": actual_price * (1 - sl_pct),
-        "realMode": is_real,
+        "symbol":      sym,
+        "icon":        sym_data["icon"],
+        "entryPrice":  actual_price,
+        "currentPrice": actual_price,
+        "highPrice":   actual_price,
+        "size":        size,
+        "size_remaining": size,        # per TP parziale
+        "tp1_hit":     False,          # TP1 già raggiunto?
+        "entryTime":   datetime.now().isoformat(),
+        "stopPrice":   stop_price,
+        "tp1Price":    tp1_price,
+        "tp2Price":    tp2_price,
+        "R_pct":       R_pct,
+        "realMode":    is_real,
     }
     state["positions"].append(pos)
 
-async def exit_position(state: dict, pos: dict, reason: str):
+async def exit_position(state: dict, pos: dict, reason: str, partial: bool = False):
+    """
+    Se partial=True: chiude il 50% della posizione (TP1).
+    Se partial=False: chiude tutto.
+    """
     cur  = pos["currentPrice"]
     sym  = pos["symbol"]
     dur  = (datetime.now() - datetime.fromisoformat(pos["entryTime"])).total_seconds() / 60
+
+    # Dimensione effettiva da chiudere
+    close_size = pos["size_remaining"] * 0.5 if partial else pos["size_remaining"]
 
     if pos.get("realMode", False):
         cb_key    = state.get("cb_key", "") or _ENV_CB_KEY
@@ -451,13 +535,15 @@ async def exit_position(state: dict, pos: dict, reason: str):
                 if acc["currency"] == sym:
                     real_qty = float(acc["available_balance"]["value"])
                     break
-            if real_qty <= 0:
+            # In caso parziale vendiamo metà qty, arrotondata
+            qty_to_sell = round(real_qty * 0.5, 8) if partial else round(real_qty, 8)
+            if qty_to_sell <= 0:
                 add_log(state, "info", "ERRORE", f"Saldo {sym}: {real_qty} — vendita annullata")
             else:
                 body = {
                     "client_order_id": f"ca-exit-{sym}-{int(time.time())}",
                     "product_id": f"{sym}-USDC", "side": "SELL",
-                    "order_configuration": {"market_market_ioc": {"base_size": str(round(real_qty, 8))}}
+                    "order_configuration": {"market_market_ioc": {"base_size": str(qty_to_sell)}}
                 }
                 result = await coinbase_request("POST", "/api/v3/brokerage/orders", body, cb_key=cb_key, cb_secret=cb_secret)
                 if result.get("success") != True:
@@ -465,17 +551,38 @@ async def exit_position(state: dict, pos: dict, reason: str):
                 else:
                     filled = result.get("success_response", {})
                     cur = float(filled.get("average_filled_price", cur)) or cur
-                    add_log(state, "info", "VENDUTO", f"{sym} qty: {real_qty:.6f} @ ${cur:.4f}")
+                    add_log(state, "info", "VENDUTO", f"{sym} qty: {qty_to_sell:.6f} @ ${cur:.4f}")
         except Exception as e:
             add_log(state, "info", "ERRORE", f"Coinbase exit error: {e}")
 
-    pnl = (cur - pos["entryPrice"]) / pos["entryPrice"] * pos["size"]
+    pnl = (cur - pos["entryPrice"]) / pos["entryPrice"] * close_size
     pct = (cur - pos["entryPrice"]) / pos["entryPrice"] * 100
 
-    state["currentCapital"] += pos["size"] + pnl
+    if partial:
+        # TP1: restituisce metà capitale, aggiorna size_remaining, sposta stop a breakeven
+        state["currentCapital"] += close_size + pnl
+        pos["size_remaining"] -= close_size
+        pos["stopPrice"]       = pos["entryPrice"]  # breakeven
+        pos["tp1_hit"]         = True
+        mode = "REALE" if pos.get("realMode") else "SIM"
+        add_log(state, "sell", f"TP1 {mode}",
+            f"{sym} 50% @ ${cur:.4f} | +{pnl:.2f}$ ({pct:+.2f}%) | stop → breakeven")
+        if pos.get("realMode"):
+            await send_telegram(
+                "TP1 REALE\n" + sym + " 50% @ $" + f"{cur:.4f}" +
+                "\nP&L parziale: +" + f"{pnl:.2f}" + "$\nStop spostato a breakeven"
+            )
+        return  # posizione resta aperta per TP2
+
+    # Chiusura totale
+    # Usa size originale per il PnL finale (già parte è stata realizzata a TP1)
+    state["currentCapital"] += pos["size_remaining"] + pnl
     state["tradeCount"] += 1
     if pnl > 0:
         state["wins"] += 1
+        state["consecutiveLosses"] = 0
+    else:
+        state["consecutiveLosses"] = state.get("consecutiveLosses", 0) + 1
 
     cfg = state["config"]
     state["cooldowns"][sym] = (datetime.now().timestamp() + cfg.get("cooldown", 1) * 3600) * 1000
@@ -485,14 +592,25 @@ async def exit_position(state: dict, pos: dict, reason: str):
         "pnl": pnl, "pct": pct, "time": datetime.now().isoformat(),
         "entryTime": pos["entryTime"], "durationMin": round(dur, 1),
         "size": pos["size"], "realMode": pos.get("realMode", False),
+        "tp1_hit": pos.get("tp1_hit", False),
     })
     state["positions"] = [p for p in state["positions"] if p is not pos]
     mode = "REALE" if pos.get("realMode") else "SIM"
-    add_log(state, "sell", f"{reason} {mode}", f"{sym} @ ${cur:.4f} | {pnl:+.2f}$ ({pct:+.2f}%) | {dur:.0f} min")
+    add_log(state, "sell", f"{reason} {mode}",
+        f"{sym} @ ${cur:.4f} | {pnl:+.2f}$ ({pct:+.2f}%) | {dur:.0f} min")
     if pos.get("realMode"):
         esito = "PROFITTO" if pnl >= 0 else "PERDITA"
-        msg = "VENDITA REALE - " + esito + "\n" + sym + " @ $" + f"{cur:.4f}" + "\nP&L: " + f"{pnl:+.2f}" + "$"
+        msg = ("VENDITA REALE - " + esito + "\n" + sym + " @ $" + f"{cur:.4f}" +
+               "\nP&L: " + f"{pnl:+.2f}" + "$")
         await send_telegram(msg)
+
+    # Controllo stop automatico per perdite consecutive
+    max_losses = cfg.get("maxConsecutiveLosses", 0)
+    if max_losses > 0 and state.get("consecutiveLosses", 0) >= max_losses:
+        state["running"] = False
+        add_log(state, "info", "STOP AUTO",
+            f"{max_losses} perdite consecutive — sessione fermata automaticamente")
+        await send_telegram(f"STOP AUTO: {max_losses} perdite consecutive")
 
 # ── main loop ─────────────────────────────────────────────────────────────────
 
@@ -509,31 +627,48 @@ async def scan_and_trade(state: dict):
         add_log(state, "info", "FINE SESSIONE", "Durata massima raggiunta.")
         return
 
-    # Gestione trailing stop per posizioni aperte
+    # Controllo maxTrades
+    max_trades = cfg.get("maxTrades", 0)
+    if max_trades > 0 and state["tradeCount"] >= max_trades:
+        if state["positions"]:
+            pass  # aspetta che le posizioni aperte si chiudano
+        else:
+            state["running"] = False
+            add_log(state, "info", "STOP AUTO", f"Raggiunto limite di {max_trades} trade — sessione fermata")
+            return
+
+    # Gestione posizioni aperte: TP1, TP2, stop loss
     for pos in list(state["positions"]):
-        cur = pos["currentPrice"]
+        cur   = pos["currentPrice"]
         entry = pos["entryPrice"]
-        profit_pct = (cur - entry) / entry * 100
+
         if cur > pos.get("highPrice", cur):
             pos["highPrice"] = cur
-        high = pos["highPrice"]
-        if profit_pct >= 5.0:
-            new_stop = high * 0.99
-        elif profit_pct >= 3.0:
-            new_stop = high * 0.985
-        elif profit_pct >= 1.5:
-            new_stop = entry
-        else:
-            new_stop = pos["stopPrice"]
-        if new_stop > pos["stopPrice"]:
-            pos["stopPrice"] = new_stop
+
+        # TP1: prima volta che tocca +1R
+        if not pos.get("tp1_hit", False) and cur >= pos["tp1Price"]:
+            await exit_position(state, pos, "TP1", partial=True)
+            continue
+
+        # TP2: tocca +1.5R → chiude tutto il rimanente
+        if pos.get("tp1_hit", False) and cur >= pos["tp2Price"]:
+            await exit_position(state, pos, "TP2")
+            continue
+
+        # Stop loss (include breakeven dopo TP1)
         if cur <= pos["stopPrice"]:
-            await exit_position(state, pos, "STOP LOSS")
+            reason = "STOP BREAKEVEN" if pos.get("tp1_hit") else "STOP LOSS"
+            await exit_position(state, pos, reason)
 
     alloc_pct = cfg.get("allocPct", 0.20)
     max_pos   = max(1, int(round(1 / alloc_pct)))
     open_syms = {p["symbol"] for p in state["positions"]}
     slots     = max_pos - len(state["positions"])
+
+    # Non aprire nuove posizioni se maxTrades raggiunto
+    if max_trades > 0 and state["tradeCount"] >= max_trades:
+        _update_pnl(state)
+        return
 
     if slots <= 0 or state["currentCapital"] < state["capital"] * alloc_pct * 0.5:
         _update_pnl(state)
@@ -541,19 +676,20 @@ async def scan_and_trade(state: dict):
 
     prices_ok = [sym for sym, d in market_data.items() if d["price"] > 0]
 
-    # Filtro BTC trend: pausa se BTC scende
-    btc = market_data.get("BTC", {})
+    # Filtro BTC trend
+    btc    = market_data.get("BTC", {})
     btc_1h = btc.get("change1h", 0)
     if btc_1h < -0.3:
         add_log(state, "info", "PAUSA", f"BTC {btc_1h:+.2f}% 1h — agente in attesa")
         _update_pnl(state)
         return
 
-    min_vol   = cfg.get("minVolume", 0)
-    ema_filter = cfg.get("emaFilter", True)
+    min_vol      = cfg.get("minVolume", 0)
+    ema_filter   = cfg.get("emaFilter", True)
     pullback_tol = cfg.get("pullbackTolerance", 0.015)
+    vol_mult     = cfg.get("volMultiplier", 1.2)
+    max_stop_pct = cfg.get("maxStopPct", 0.025)
 
-    # Universe: coin con volume sufficiente, non in posizione, non in cooldown
     universe = [
         {**d, "symbol": sym}
         for sym, d in market_data.items()
@@ -563,36 +699,34 @@ async def scan_and_trade(state: dict):
         and sym in _coinbase_products
         and (state["cooldowns"].get(sym, 0) < datetime.now().timestamp() * 1000)
     ]
-
-    # Ordina per volume (top coin prima) poi applica filtro EMA
     universe_sorted = sorted(universe, key=lambda d: d.get("volume24h", 0), reverse=True)
 
-    candidates = []
+    candidates  = []
     ema_skipped = 0
 
     for d in universe_sorted:
         sym = d["symbol"]
         if ema_filter:
-            signal = get_ema_signal(sym, d["price"], pullback_tol)
+            signal = get_ema_signal(sym, d["price"], pullback_tol, vol_mult, max_stop_pct)
             if not signal["signal"]:
                 ema_skipped += 1
                 continue
-            d["ema_reason"] = signal["reason"]
+            d["ema_reason"]  = signal["reason"]
+            d["stop_price"]  = signal["stop_price"]
+            d["R_pct"]       = signal["R"]
         candidates.append(d)
         if len(candidates) >= slots:
             break
 
-    top3 = [(d["symbol"], round(d.get("volume24h",0)/1e6,0)) for d in universe_sorted[:3]]
-    candles_ok = len(candle_data)
+    top3 = [(d["symbol"], round(d.get("volume24h", 0) / 1e6, 0)) for d in universe_sorted[:3]]
     add_log(state, "info", "SCAN",
         f"Universe: {len(prices_ok)} | Top3 vol (M$): {top3} | "
-        f"Candidati EMA: {len(candidates)} | Saltati: {ema_skipped} | "
-        f"Candele: {candles_ok} | BTC1h: {btc_1h:+.2f}%"
+        f"Candidati: {len(candidates)} | Saltati EMA: {ema_skipped} | "
+        f"Candele: {len(candle_data)} | BTC1h: {btc_1h:+.2f}% | Trade: {state['tradeCount']}/{max_trades or 'inf'}"
     )
 
     for d in candidates:
-        ema_info = d.get("ema_reason", "EMA filter off")
-        add_log(state, "info", "SEGNALE", f"{d['symbol']} | {ema_info}")
+        add_log(state, "info", "SEGNALE", f"{d['symbol']} | {d.get('ema_reason', 'EMA off')}")
         await enter_position(state, d)
 
     _update_pnl(state)
@@ -837,27 +971,33 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
         "sessionStart": datetime.now().timestamp(),
         "sessionDuration": int(cfg.get("sessionDuration", 8)) * 3600 * 1000,
         "config": {
-            "allocPct":           float(cfg.get("allocPct", 0.20)),
-            "stopLoss":           float(cfg.get("stopLoss", 0.03)),
-            "cooldown":           float(cfg.get("cooldown", 1)),
-            "minVolume":          float(cfg.get("minVolume", 0)),
-            "sessionDuration":    int(cfg.get("sessionDuration", 8)),
-            "realMode":           bool(cfg.get("realMode", False)),
-            "emaFilter":          bool(cfg.get("emaFilter", True)),
-            "pullbackTolerance":  float(cfg.get("pullbackTolerance", 0.015)),
+            "allocPct":            float(cfg.get("allocPct", 0.20)),
+            "stopLoss":            float(cfg.get("stopLoss", 0.01)),
+            "cooldown":            float(cfg.get("cooldown", 1)),
+            "minVolume":           float(cfg.get("minVolume", 0)),
+            "sessionDuration":     int(cfg.get("sessionDuration", 8)),
+            "realMode":            bool(cfg.get("realMode", False)),
+            "emaFilter":           bool(cfg.get("emaFilter", True)),
+            "pullbackTolerance":   float(cfg.get("pullbackTolerance", 0.015)),
+            "volMultiplier":       float(cfg.get("volMultiplier", 1.2)),
+            "maxStopPct":          float(cfg.get("maxStopPct", 0.025)),
+            "maxTrades":           int(cfg.get("maxTrades", 0)),
+            "maxConsecutiveLosses": int(cfg.get("maxConsecutiveLosses", 3)),
         },
         "cooldowns": {}, "tradeCount": 0, "wins": 0, "trades": [], "log": [],
         "cb_key": cb_key, "cb_secret": cb_secret,
+        "consecutiveLosses": 0,
     })
-    alloc = float(cfg.get("allocPct", 0.20)) * 100
-    sl    = float(cfg.get("stopLoss", 0.03)) * 100
-    vol   = float(cfg.get("minVolume", 0)) / 1_000_000
-    mode  = "REALE" if cfg.get("realMode", False) else "SIMULAZIONE"
-    ema_s = "ON" if cfg.get("emaFilter", True) else "OFF"
-    ptol  = float(cfg.get("pullbackTolerance", 0.015)) * 100
+    alloc  = float(cfg.get("allocPct", 0.20)) * 100
+    vol    = float(cfg.get("minVolume", 0)) / 1_000_000
+    mode   = "REALE" if cfg.get("realMode", False) else "SIMULAZIONE"
+    ema_s  = "ON" if cfg.get("emaFilter", True) else "OFF"
+    ptol   = float(cfg.get("pullbackTolerance", 0.015)) * 100
+    mt     = int(cfg.get("maxTrades", 0))
+    mcl    = int(cfg.get("maxConsecutiveLosses", 3))
     add_log(state, "info", "AVVIO",
-        f"${capital:.0f} | {mode} | Alloc: {alloc:.0f}% | SL: {sl:.1f}% | "
-        f"Vol: ${vol:.0f}M | EMA: {ema_s} | Pullback tol: {ptol:.1f}%"
+        f"${capital:.0f} | {mode} | Alloc: {alloc:.0f}% | Vol: ${vol:.0f}M | "
+        f"EMA: {ema_s} | Pullback: {ptol:.1f}% | MaxTrade: {mt or 'inf'} | MaxLoss: {mcl}"
     )
     return {"ok": True}
 
