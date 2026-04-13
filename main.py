@@ -86,40 +86,35 @@ async def send_telegram(msg: str):
     except Exception as e:
         print(f"Telegram error: {e}")
 
-COINBASE_API_KEY     = os.environ.get("CB_KEY", "")
-COINBASE_PRIVATE_KEY = os.environ.get("CB_SECRET", "")
+# Fallback env vars (compatibilita con setup precedente)
+_ENV_CB_KEY    = os.environ.get("CB_KEY", "")
+_ENV_CB_SECRET = os.environ.get("CB_SECRET", "")
 
-def make_coinbase_jwt(method: str, path: str) -> str:
-    """Genera JWT per autenticazione Coinbase Advanced API"""
-    import re
-    # Gestisce sia \n letterali che newline reali
-    key = COINBASE_PRIVATE_KEY
+def make_coinbase_jwt(method: str, path: str, cb_key: str, cb_secret: str) -> str:
+    key = cb_secret
     if '\\n' in key:
         key = key.replace('\\n', '\n')
     elif '\n' not in key and 'BEGIN' in key:
-        # prova a ricostruire i newline dai delimitatori PEM
         key = key.replace('-----BEGIN EC PRIVATE KEY----- ', '-----BEGIN EC PRIVATE KEY-----\n')
         key = key.replace(' -----END EC PRIVATE KEY-----', '\n-----END EC PRIVATE KEY-----')
     payload = {
-        "sub": COINBASE_API_KEY,
+        "sub": cb_key,
         "iss": "cdp",
         "nbf": int(time.time()),
         "exp": int(time.time()) + 120,
         "uri": f"{method} api.coinbase.com{path}",
     }
     token = jwt.encode(payload, key, algorithm="ES256",
-                       headers={"kid": COINBASE_API_KEY, "nonce": hashlib.sha256(os.urandom(16)).hexdigest()[:16]})
+                       headers={"kid": cb_key, "nonce": hashlib.sha256(os.urandom(16)).hexdigest()[:16]})
     return token
 
-async def coinbase_request(method: str, path: str, body: dict = None) -> dict:
-    """Esegue una richiesta autenticata all'API Coinbase Advanced"""
-    # JWT usa solo il path senza query string
+async def coinbase_request(method: str, path: str, body: dict = None,
+                           cb_key: str = None, cb_secret: str = None) -> dict:
+    api_key    = cb_key    or _ENV_CB_KEY
+    api_secret = cb_secret or _ENV_CB_SECRET
     jwt_path = path.split("?")[0]
-    token = make_coinbase_jwt(method, jwt_path)
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
+    token = make_coinbase_jwt(method, jwt_path, api_key, api_secret)
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=30) as client:
         if method == "GET":
             r = await client.get(f"{COINBASE_BASE}{path}", headers=headers)
@@ -130,36 +125,37 @@ async def coinbase_request(method: str, path: str, body: dict = None) -> dict:
 # universe dinamico — popolato da fetch_prices()
 market_data = {}  # sym -> {price, change1h, change24h, volume24h, priceHistory, icon}
 
-agent_state = {
-    "running": False,
-    "capital": 0.0,
-    "currentCapital": 0.0,
-    "positions": [],
-    "pnlHistory": [],
-    "sessionStart": None,
-    "sessionDuration": 0,
-    "config": {},
-    "cooldowns": {},
-    "tradeCount": 0,
-    "wins": 0,
-    "trades": [],
-    "log": [],
-}
+# Sessioni multi-utente: user_id -> state dict
+user_sessions: dict = {}
+
+def make_session() -> dict:
+    return {
+        "running": False, "capital": 0.0, "currentCapital": 0.0,
+        "positions": [], "pnlHistory": [], "sessionStart": None,
+        "sessionDuration": 0, "config": {}, "cooldowns": {},
+        "tradeCount": 0, "wins": 0, "trades": [], "log": [],
+        "cb_key": "", "cb_secret": "",
+    }
+
+def get_session(user_id: int) -> dict:
+    if user_id not in user_sessions:
+        user_sessions[user_id] = make_session()
+    return user_sessions[user_id]
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def add_log(type_, label, desc):
-    agent_state["log"].insert(0, {
+def add_log(state: dict, type_: str, label: str, desc: str):
+    state["log"].insert(0, {
         "type": type_, "label": label, "desc": desc,
         "time": datetime.now().strftime("%H:%M:%S")
     })
-    if len(agent_state["log"]) > 200:
-        agent_state["log"].pop()
+    if len(state["log"]) > 200:
+        state["log"].pop()
 
-def unrealized_pnl():
+def unrealized_pnl(state: dict) -> float:
     return sum(
         (p["currentPrice"] - p["entryPrice"]) / p["entryPrice"] * p["size"]
-        for p in agent_state["positions"]
+        for p in state["positions"]
     )
 
 # ── coinbase ─────────────────────────────────────────────────────────────────
@@ -307,11 +303,12 @@ async def fetch_prices():
             market_data[sym]["change24h"] = change24h
             market_data[sym]["volume24h"] = vol_usd
 
-            for pos in agent_state["positions"]:
-                if pos["symbol"] == sym:
-                    pos["currentPrice"] = price
-                    if price > pos["highPrice"]:
-                        pos["highPrice"] = price
+            for state in user_sessions.values():
+                for pos in state["positions"]:
+                    if pos["symbol"] == sym:
+                        pos["currentPrice"] = price
+                        if price > pos["highPrice"]:
+                            pos["highPrice"] = price
 
     except Exception as e:
         print(f"Fetch error: {e}")
@@ -340,176 +337,141 @@ async def fetch_atr_1h(symbol_usdt: str, periods: int = 14):
 
 # ── trading ───────────────────────────────────────────────────────────────────
 
-async def enter_position(sym_data: dict):
-    cfg      = agent_state["config"]
+async def enter_position(state: dict, sym_data: dict):
+    cfg      = state["config"]
     price    = sym_data["price"]
     sym      = sym_data["symbol"]
     is_real  = cfg.get("realMode", False)
 
     alloc_pct = cfg.get("allocPct", 0.20)
-    size = agent_state["capital"] * alloc_pct
-    size = min(size, agent_state["currentCapital"])
+    size = state["capital"] * alloc_pct
+    size = min(size, state["currentCapital"])
     if size < 1:
         return
 
     sl_pct = cfg.get("stopLoss", 0.03)
 
-    # ── MODALITA' REALE ────────────────────────────────────────────────────────
     if is_real:
+        cb_key    = state.get("cb_key", "") or _ENV_CB_KEY
+        cb_secret = state.get("cb_secret", "") or _ENV_CB_SECRET
         try:
-            # calcola quantita' coin da comprare
-            qty = round(size / price, 8)
-            product_id = f"{sym}-USDC"
             body = {
                 "client_order_id": f"ca-{sym}-{int(time.time())}",
-                "product_id": product_id,
+                "product_id": f"{sym}-USDC",
                 "side": "BUY",
-                "order_configuration": {
-                    "market_market_ioc": {
-                        "quote_size": str(round(size, 2))  # spendi X USD
-                    }
-                }
+                "order_configuration": {"market_market_ioc": {"quote_size": str(round(size, 2))}}
             }
-            result = await coinbase_request("POST", "/api/v3/brokerage/orders", body)
+            result = await coinbase_request("POST", "/api/v3/brokerage/orders", body, cb_key=cb_key, cb_secret=cb_secret)
             if result.get("success") != True:
                 err = result.get("error_response", {})
                 err_msg = err.get("message", str(result))
-                add_log("info", "ERRORE", f"Ordine {sym} fallito: {err_msg}")
-                # se account non disponibile, metti cooldown lungo su questa coin
+                add_log(state, "info", "ERRORE", f"Ordine {sym} fallito: {err_msg}")
                 if "account is not available" in str(result) or "not available" in err_msg:
-                    agent_state["cooldowns"][sym] = (datetime.now().timestamp() + 3600) * 1000
-                    add_log("info", "ESCLUSA", f"{sym} non disponibile su questo account — esclusa per 1h")
+                    state["cooldowns"][sym] = (datetime.now().timestamp() + 3600) * 1000
+                    add_log(state, "info", "ESCLUSA", f"{sym} non disponibile — esclusa per 1h")
                 return
-            # usa il prezzo reale dall'ordine se disponibile
             filled = result.get("success_response", {})
             actual_price = float(filled.get("average_filled_price", price)) or price
-            add_log("buy", "ACQUISTO REALE", f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | SL: {sl_pct*100:.1f}% | Trailing ON")
-            await send_telegram("ACQUISTO REALE\n" + sym + " @ $" + f"{actual_price:.4f}" + "\nSize: $" + f"{size:.2f}" + " | SL: " + f"{sl_pct*100:.1f}" + "%")
+            add_log(state, "buy", "ACQUISTO REALE", f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | SL: {sl_pct*100:.1f}% | Trailing ON")
+            await send_telegram("ACQUISTO REALE\n" + sym + " @ $" + f"{actual_price:.4f}" + "\nSize: $" + f"{size:.2f}")
         except Exception as e:
-            add_log("info", "ERRORE", f"Coinbase error: {e}")
+            add_log(state, "info", "ERRORE", f"Coinbase error: {e}")
             return
     else:
         actual_price = price
-        add_log("buy", "ACQUISTO SIM", f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | SL: {sl_pct*100:.1f}% | Trailing ON")
+        add_log(state, "buy", "ACQUISTO SIM", f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | SL: {sl_pct*100:.1f}% | Trailing ON")
 
-    agent_state["currentCapital"] -= size
+    state["currentCapital"] -= size
     pos = {
-        "symbol": sym,
-        "icon": sym_data["icon"],
-        "entryPrice": actual_price,
-        "currentPrice": actual_price,
-        "highPrice": actual_price,
-        "size": size,
+        "symbol": sym, "icon": sym_data["icon"],
+        "entryPrice": actual_price, "currentPrice": actual_price,
+        "highPrice": actual_price, "size": size,
         "entryTime": datetime.now().isoformat(),
         "stopPrice": actual_price * (1 - sl_pct),
         "realMode": is_real,
     }
-    agent_state["positions"].append(pos)
+    state["positions"].append(pos)
 
-async def exit_position(pos: dict, reason: str):
+async def exit_position(state: dict, pos: dict, reason: str):
     cur  = pos["currentPrice"]
     sym  = pos["symbol"]
-    pnl  = (cur - pos["entryPrice"]) / pos["entryPrice"] * pos["size"]
-    pct  = (cur - pos["entryPrice"]) / pos["entryPrice"] * 100
     dur  = (datetime.now() - datetime.fromisoformat(pos["entryTime"])).total_seconds() / 60
 
-    # ── MODALITA' REALE ────────────────────────────────────────────────────────
     if pos.get("realMode", False):
+        cb_key    = state.get("cb_key", "") or _ENV_CB_KEY
+        cb_secret = state.get("cb_secret", "") or _ENV_CB_SECRET
         try:
-            # leggi il saldo reale della coin da Coinbase
-            accounts = await coinbase_request("GET", "/api/v3/brokerage/accounts")
+            accounts = await coinbase_request("GET", "/api/v3/brokerage/accounts", cb_key=cb_key, cb_secret=cb_secret)
             real_qty = 0.0
             for acc in accounts.get("accounts", []):
                 if acc["currency"] == sym:
                     real_qty = float(acc["available_balance"]["value"])
                     break
-
             if real_qty <= 0:
-                add_log("info", "ERRORE", f"Saldo {sym} su Coinbase: {real_qty} — vendita annullata")
+                add_log(state, "info", "ERRORE", f"Saldo {sym}: {real_qty} — vendita annullata")
             else:
                 body = {
                     "client_order_id": f"ca-exit-{sym}-{int(time.time())}",
-                    "product_id": f"{sym}-USDC",
-                    "side": "SELL",
-                    "order_configuration": {
-                        "market_market_ioc": {
-                            "base_size": str(round(real_qty, 8))
-                        }
-                    }
+                    "product_id": f"{sym}-USDC", "side": "SELL",
+                    "order_configuration": {"market_market_ioc": {"base_size": str(round(real_qty, 8))}}
                 }
-                result = await coinbase_request("POST", "/api/v3/brokerage/orders", body)
+                result = await coinbase_request("POST", "/api/v3/brokerage/orders", body, cb_key=cb_key, cb_secret=cb_secret)
                 if result.get("success") != True:
-                    add_log("info", "ERRORE", f"Vendita {sym} fallita: {result.get('error_response', {}).get('message', str(result))}")
+                    add_log(state, "info", "ERRORE", f"Vendita {sym} fallita: {result.get('error_response', {}).get('message', str(result))}")
                 else:
                     filled = result.get("success_response", {})
                     cur = float(filled.get("average_filled_price", cur)) or cur
-                    add_log("info", "VENDUTO", f"{sym} qty reale: {real_qty:.6f} @ ${cur:.4f}")
+                    add_log(state, "info", "VENDUTO", f"{sym} qty: {real_qty:.6f} @ ${cur:.4f}")
         except Exception as e:
-            add_log("info", "ERRORE", f"Coinbase exit error: {e}")
+            add_log(state, "info", "ERRORE", f"Coinbase exit error: {e}")
 
-    # ricalcola pnl con prezzo reale
     pnl = (cur - pos["entryPrice"]) / pos["entryPrice"] * pos["size"]
     pct = (cur - pos["entryPrice"]) / pos["entryPrice"] * 100
 
-    agent_state["currentCapital"] += pos["size"] + pnl
-    agent_state["tradeCount"] += 1
+    state["currentCapital"] += pos["size"] + pnl
+    state["tradeCount"] += 1
     if pnl > 0:
-        agent_state["wins"] += 1
+        state["wins"] += 1
 
-    cfg = agent_state["config"]
-    agent_state["cooldowns"][sym] = (
-        datetime.now().timestamp() + cfg.get("cooldown", 1) * 3600
-    ) * 1000
-
-    agent_state["trades"].append({
+    cfg = state["config"]
+    state["cooldowns"][sym] = (datetime.now().timestamp() + cfg.get("cooldown", 1) * 3600) * 1000
+    state["trades"].append({
         "symbol": sym, "reason": reason,
         "entryPrice": pos["entryPrice"], "exitPrice": cur,
-        "pnl": pnl, "pct": pct,
-        "time": datetime.now().isoformat(),
-        "entryTime": pos["entryTime"],
-        "durationMin": round(dur, 1),
-        "size": pos["size"],
-        "realMode": pos.get("realMode", False),
+        "pnl": pnl, "pct": pct, "time": datetime.now().isoformat(),
+        "entryTime": pos["entryTime"], "durationMin": round(dur, 1),
+        "size": pos["size"], "realMode": pos.get("realMode", False),
     })
-
-    agent_state["positions"] = [p for p in agent_state["positions"] if p is not pos]
+    state["positions"] = [p for p in state["positions"] if p is not pos]
     mode = "REALE" if pos.get("realMode") else "SIM"
-    add_log("sell", f"{reason} {mode}",
-        f"{sym} @ ${cur:.4f} | {pnl:+.2f}$ ({pct:+.2f}%) | {dur:.0f} min"
-    )
+    add_log(state, "sell", f"{reason} {mode}", f"{sym} @ ${cur:.4f} | {pnl:+.2f}$ ({pct:+.2f}%) | {dur:.0f} min")
     if pos.get("realMode"):
         esito = "PROFITTO" if pnl >= 0 else "PERDITA"
-        msg = "VENDITA REALE - " + esito + "\n" + sym + " @ $" + f"{cur:.4f}" + "\nP&L: " + f"{pnl:+.2f}" + "$ (" + f"{pct:+.2f}" + "%)\nDurata: " + f"{dur:.0f}" + " min | " + reason
+        msg = "VENDITA REALE - " + esito + "\n" + sym + " @ $" + f"{cur:.4f}" + "\nP&L: " + f"{pnl:+.2f}" + "$"
         await send_telegram(msg)
 
 # ── main loop ─────────────────────────────────────────────────────────────────
 
-async def scan_and_trade():
-    if not agent_state["running"]:
+async def scan_and_trade(state: dict):
+    if not state["running"]:
         return
-    cfg = agent_state["config"]
+    cfg = state["config"]
 
-    # session expired?
-    elapsed_ms = (datetime.now().timestamp() - agent_state["sessionStart"]) * 1000
-    if elapsed_ms >= agent_state["sessionDuration"]:
-        agent_state["running"] = False
-        for p in list(agent_state["positions"]):
-            await exit_position(p, "SESSIONE SCADUTA")
-        add_log("info", "FINE SESSIONE", "Durata massima raggiunta.")
+    elapsed_ms = (datetime.now().timestamp() - state["sessionStart"]) * 1000
+    if elapsed_ms >= state["sessionDuration"]:
+        state["running"] = False
+        for p in list(state["positions"]):
+            await exit_position(state, p, "SESSIONE SCADUTA")
+        add_log(state, "info", "FINE SESSIONE", "Durata massima raggiunta.")
         return
 
-    # trailing stop dinamico + check exits
-    for pos in list(agent_state["positions"]):
+    for pos in list(state["positions"]):
         cur = pos["currentPrice"]
         entry = pos["entryPrice"]
         profit_pct = (cur - entry) / entry * 100
-
-        # aggiorna highPrice
         if cur > pos.get("highPrice", cur):
             pos["highPrice"] = cur
         high = pos["highPrice"]
-
-        # trailing stop dinamico - lo stop sale mai scende
         if profit_pct >= 5.0:
             new_stop = high * 0.99
         elif profit_pct >= 3.0:
@@ -518,85 +480,63 @@ async def scan_and_trade():
             new_stop = entry
         else:
             new_stop = pos["stopPrice"]
-
         if new_stop > pos["stopPrice"]:
             pos["stopPrice"] = new_stop
-
-        # check uscita
         if cur <= pos["stopPrice"]:
-            await exit_position(pos, "STOP LOSS")
+            await exit_position(state, pos, "STOP LOSS")
 
-    # how many more positions can we open?
-    alloc_pct   = cfg.get("allocPct", 0.20)
-    max_pos     = max(1, int(round(1 / alloc_pct)))   # e.g. 20% → 5
-    open_syms   = {p["symbol"] for p in agent_state["positions"]}
-    slots       = max_pos - len(agent_state["positions"])
+    alloc_pct = cfg.get("allocPct", 0.20)
+    max_pos   = max(1, int(round(1 / alloc_pct)))
+    open_syms = {p["symbol"] for p in state["positions"]}
+    slots     = max_pos - len(state["positions"])
 
-    if slots <= 0 or agent_state["currentCapital"] < agent_state["capital"] * alloc_pct * 0.5:
-        # update pnl history and return
-        _update_pnl()
+    if slots <= 0 or state["currentCapital"] < state["capital"] * alloc_pct * 0.5:
+        _update_pnl(state)
         return
 
     prices_ok = [sym for sym, d in market_data.items() if d["price"] > 0]
-
-    # ── FILTRO BTC ─────────────────────────────────────────────────────────────
     btc = market_data.get("BTC", {})
     btc_1h = btc.get("change1h", 0)
-    btc_ok = btc_1h >= -0.3  # blocca se BTC sta scendendo > 0.3% nell'ultima ora
-    if not btc_ok:
-        add_log("info", "PAUSA",
-            f"BTC {btc_1h:+.2f}% 1h — agente in attesa"
-        )
-        _update_pnl()
+    if btc_1h < -0.3:
+        add_log(state, "info", "PAUSA", f"BTC {btc_1h:+.2f}% 1h — agente in attesa")
+        _update_pnl(state)
         return
 
-    min_vol = cfg.get("minVolume", 10_000_000)
-
-    # rank coins — filtro cooldown, posizioni aperte, volume, solo coin con logo approvato
+    min_vol = cfg.get("minVolume", 0)
     ranked = sorted(
-        [
-            {**d, "symbol": sym} for sym, d in market_data.items()
-            if d["price"] > 0
-            and d.get("volume24h", 0) >= min_vol   # filtro volume solo qui
-            and sym not in open_syms
-            and sym in _coinbase_products  # solo coin disponibili su Coinbase
-            and (agent_state["cooldowns"].get(sym, 0) < datetime.now().timestamp() * 1000)
-        ],
-        key=lambda d: d["change24h"],
-        reverse=True
+        [{**d, "symbol": sym} for sym, d in market_data.items()
+         if d["price"] > 0
+         and d.get("volume24h", 0) >= min_vol
+         and sym not in open_syms
+         and sym in _coinbase_products
+         and (state["cooldowns"].get(sym, 0) < datetime.now().timestamp() * 1000)],
+        key=lambda d: d["change24h"], reverse=True
     )
 
     min_mom = cfg.get("minMomentum", 0.0)
-    candidates = [
-        d for d in ranked
-        if d.get("change1h", 0) >= min_mom   # momentum ultima ora (configurabile)
-    ]
+    candidates = [d for d in ranked if d.get("change1h", 0) >= min_mom]
 
-    top3_detail = [(d["symbol"], round(d["change24h"],2), round(d.get("change1h",0),2)) for d in ranked[:3]]
-    # log coin con change1h positivo ma escluse dal filtro volume
-    vol_blocked = [(sym, round(d.get("change1h",0),2), round(d.get("volume24h",0)/1e6,1)) 
-                   for sym, d in market_data.items() 
-                   if d.get("change1h",0) >= min_mom and d.get("volume24h",0) < min_vol][:3]
-    add_log("info", "SCAN",
-        f"Top3 (24h,1h): {top3_detail} | "
-        f"Candidati: {len(candidates)} | Slot: {slots} | Universe: {len(prices_ok)} | BTC1h: {btc_1h:+.2f}%"
-        + (f" | VolBlocked: {vol_blocked}" if vol_blocked else "")
+    top3 = [(d["symbol"], round(d["change24h"],2), round(d.get("change1h",0),2)) for d in ranked[:3]]
+    add_log(state, "info", "SCAN",
+        f"Top3 (24h,1h): {top3} | Candidati: {len(candidates)} | Slot: {slots} | Universe: {len(prices_ok)} | BTC1h: {btc_1h:+.2f}%"
     )
 
     for d in candidates[:slots]:
-        await enter_position(d)
+        await enter_position(state, d)
+    
+    _update_pnl(state)
 
-def _update_pnl():
-    if not agent_state["sessionStart"]:
+def _update_pnl(state: dict):
+    if not state["sessionStart"]:
         return
-    unr      = unrealized_pnl()
-    pos_val  = sum(p["size"] for p in agent_state["positions"])
-    total    = agent_state["currentCapital"] + pos_val + unr
-    pnl_val  = total - agent_state["capital"]
-    t        = (datetime.now().timestamp() - agent_state["sessionStart"]) / 60
-    agent_state["pnlHistory"].append({"t": t, "v": pnl_val})
-    if len(agent_state["pnlHistory"]) > 500:
-        agent_state["pnlHistory"].pop(0)
+    unr     = unrealized_pnl(state)
+    pos_val = sum(p["size"] for p in state["positions"])
+    total   = state["currentCapital"] + pos_val + unr
+    pnl_val = total - state["capital"]
+    t       = (datetime.now().timestamp() - state["sessionStart"]) / 60
+    state["pnlHistory"].append({"t": t, "v": pnl_val})
+    if len(state["pnlHistory"]) > 500:
+        state["pnlHistory"].pop(0)
 
 # Telegram polling
 _tg_last_update: int = 0
@@ -620,22 +560,35 @@ async def poll_telegram():
             # solo comandi dal tuo chat
             if chat_id != str(TELEGRAM_CHAT_ID):
                 continue
-            if text.upper().startswith("/CLOSE"):
+            # trova la sessione dell'utente Telegram (prima sessione attiva o prima disponibile)
+            tg_state = None
+            for s in user_sessions.values():
+                if s["running"]:
+                    tg_state = s
+                    break
+            if tg_state is None and user_sessions:
+                tg_state = next(iter(user_sessions.values()))
+            
+            if text.upper().startswith("/CLOSE") and tg_state:
                 parts = text.split()
                 if len(parts) >= 2:
                     sym = parts[1].upper()
-                    pos = next((p for p in agent_state["positions"] if p["symbol"] == sym), None)
+                    pos = next((p for p in tg_state["positions"] if p["symbol"] == sym), None)
                     if pos:
-                        await exit_position(pos, "TELEGRAM")
-                        await send_telegram("Posizione " + sym + " chiusa manualmente via Telegram")
+                        await exit_position(tg_state, pos, "TELEGRAM")
+                        await send_telegram("Posizione " + sym + " chiusa via Telegram")
                     else:
                         await send_telegram("Nessuna posizione aperta su " + sym)
             elif text.upper() == "/STATUS":
-                pos_list = ", ".join([p["symbol"] for p in agent_state["positions"]]) or "nessuna"
-                pnl = agent_state.get("pnl", 0)
-                await send_telegram("Stato agente\nRunning: " + str(agent_state["running"]) + "\nPosizioni: " + pos_list + "\nP&L: $" + f"{pnl:.2f}")
-            elif text.upper() == "/STOP":
-                agent_state["running"] = False
+                lines = []
+                for uid, s in user_sessions.items():
+                    if s["running"]:
+                        pos_list = ", ".join([p["symbol"] for p in s["positions"]]) or "nessuna"
+                        pnl = unrealized_pnl(s)
+                        lines.append(f"Sessione {uid}: {pos_list} | P&L: ${pnl:.2f}")
+                await send_telegram("\n".join(lines) if lines else "Nessuna sessione attiva")
+            elif text.upper() == "/STOP" and tg_state:
+                tg_state["running"] = False
                 await send_telegram("Agente fermato via Telegram")
     except Exception as e:
         print(f"Telegram poll error: {e}")
@@ -644,9 +597,9 @@ async def background_loop():
     while True:
         try:
             await fetch_prices()
-            await scan_and_trade()
-            if agent_state["running"]:
-                _update_pnl()
+            for state in list(user_sessions.values()):
+                if state["running"]:
+                    await scan_and_trade(state)
             await poll_telegram()
         except Exception as e:
             import traceback
@@ -739,28 +692,29 @@ async def get_me(user_id: int = Depends(get_current_user)):
     return {"username": row["username"], "has_api_keys": bool(row["cb_key"])}
 
 @app.get("/status")
-def get_status():
-    unr     = unrealized_pnl()
-    pos_val = sum(p["size"] for p in agent_state["positions"])
-    total   = agent_state["currentCapital"] + pos_val + unr
-    pnl     = total - agent_state["capital"]
-    pct     = pnl / agent_state["capital"] * 100 if agent_state["capital"] > 0 else 0
-    wr      = agent_state["wins"] / agent_state["tradeCount"] * 100 if agent_state["tradeCount"] > 0 else 0
+async def get_status(user_id: int = Depends(get_current_user)):
+    state = get_session(user_id)
+    unr     = unrealized_pnl(state)
+    pos_val = sum(p["size"] for p in state["positions"])
+    total   = state["currentCapital"] + pos_val + unr
+    pnl     = total - state["capital"]
+    pct     = pnl / state["capital"] * 100 if state["capital"] > 0 else 0
+    wr      = state["wins"] / state["tradeCount"] * 100 if state["tradeCount"] > 0 else 0
     remaining = 0
-    if agent_state["running"] and agent_state["sessionStart"]:
-        elapsed   = (datetime.now().timestamp() - agent_state["sessionStart"]) * 1000
-        remaining = max(0, agent_state["sessionDuration"] - elapsed)
+    if state["running"] and state["sessionStart"]:
+        elapsed   = (datetime.now().timestamp() - state["sessionStart"]) * 1000
+        remaining = max(0, state["sessionDuration"] - elapsed)
     return {
-        "running": agent_state["running"],
-        "capital": agent_state["capital"],
-        "currentCapital": agent_state["currentCapital"],
+        "running": state["running"],
+        "capital": state["capital"],
+        "currentCapital": state["currentCapital"],
         "pnl": pnl, "pct": pct,
-        "tradeCount": agent_state["tradeCount"],
+        "tradeCount": state["tradeCount"],
         "winRate": wr,
-        "positions": agent_state["positions"],
+        "positions": state["positions"],
         "remainingMs": remaining,
-        "pnlHistory": agent_state["pnlHistory"][-100:],
-        "log": agent_state["log"][:40],
+        "pnlHistory": state["pnlHistory"][-100:],
+        "log": state["log"][:40],
     }
 
 @app.get("/market")
@@ -772,16 +726,31 @@ def get_market():
     return {"market": result}
 
 @app.get("/trades")
-def get_trades():
-    return {"trades": agent_state["trades"]}
+async def get_trades(user_id: int = Depends(get_current_user)):
+    state = get_session(user_id)
+    return {"trades": state["trades"]}
 
 @app.post("/start")
-async def start_agent(body: dict):
-    if agent_state["running"]:
+async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
+    state = get_session(user_id)
+    if state["running"]:
         return {"error": "Already running"}
     cfg     = body.get("config", {})
     capital = float(cfg.get("capital", 1000))
-    agent_state.update({
+    
+    # Carica API keys dal DB se disponibili
+    cb_key, cb_secret = "", ""
+    if db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                row = await conn.fetchrow("SELECT cb_key, cb_secret FROM users WHERE id = $1", user_id)
+                if row:
+                    cb_key    = row["cb_key"] or ""
+                    cb_secret = row["cb_secret"] or ""
+        except Exception as e:
+            print(f"DB key fetch error: {e}")
+    
+    state.update({
         "running": True,
         "capital": capital,
         "currentCapital": capital,
@@ -790,43 +759,45 @@ async def start_agent(body: dict):
         "sessionStart": datetime.now().timestamp(),
         "sessionDuration": int(cfg.get("sessionDuration", 8)) * 3600 * 1000,
         "config": {
-            "allocPct":      float(cfg.get("allocPct", 0.20)),
-            "stopLoss":      float(cfg.get("stopLoss", 0.03)),
-            "cooldown":      float(cfg.get("cooldown", 1)),
-            "minMomentum":   float(cfg.get("minMomentum", 0.05)),
-            "minVolume":     float(cfg.get("minVolume", 10_000_000)),
+            "allocPct":        float(cfg.get("allocPct", 0.20)),
+            "stopLoss":        float(cfg.get("stopLoss", 0.03)),
+            "cooldown":        float(cfg.get("cooldown", 1)),
+            "minMomentum":     float(cfg.get("minMomentum", 0.0)),
+            "minVolume":       float(cfg.get("minVolume", 0)),
             "sessionDuration": int(cfg.get("sessionDuration", 8)),
-            "realMode":      bool(cfg.get("realMode", False)),
+            "realMode":        bool(cfg.get("realMode", False)),
         },
         "cooldowns": {}, "tradeCount": 0, "wins": 0, "trades": [], "log": [],
+        "cb_key": cb_key, "cb_secret": cb_secret,
     })
     alloc = float(cfg.get("allocPct", 0.20)) * 100
     sl    = float(cfg.get("stopLoss", 0.03)) * 100
-
-    vol   = float(cfg.get("minVolume", 10_000_000)) / 1_000_000
-    mode  = "🔴 REALE" if cfg.get("realMode", False) else "⚪ SIMULAZIONE"
-    add_log("info", "AVVIO",
+    vol   = float(cfg.get("minVolume", 0)) / 1_000_000
+    mode  = "REALE" if cfg.get("realMode", False) else "SIMULAZIONE"
+    add_log(state, "info", "AVVIO",
         f"${capital:.0f} | {mode} | Alloc: {alloc:.0f}% | SL: {sl:.1f}% | Vol: ${vol:.0f}M"
     )
     return {"ok": True}
 
 @app.post("/stop")
-async def stop_agent():
-    if not agent_state["running"]:
+async def stop_agent(user_id: int = Depends(get_current_user)):
+    state = get_session(user_id)
+    if not state["running"]:
         return {"error": "Not running"}
-    agent_state["running"] = False
-    for p in list(agent_state["positions"]):
-        await exit_position(p, "STOP MANUALE")
-    pnl = agent_state["currentCapital"] - agent_state["capital"]
-    add_log("info", "STOP", f"P&L finale: {pnl:+.2f}$")
+    state["running"] = False
+    for p in list(state["positions"]):
+        await exit_position(state, p, "STOP MANUALE")
+    pnl = state["currentCapital"] - state["capital"]
+    add_log(state, "info", "STOP", f"P&L finale: {pnl:+.2f}$")
     return {"ok": True, "pnl": pnl}
 
 @app.post("/close_position/{symbol}")
-async def close_symbol(symbol: str):
-    pos = next((p for p in agent_state["positions"] if p["symbol"] == symbol), None)
+async def close_symbol(symbol: str, user_id: int = Depends(get_current_user)):
+    state = get_session(user_id)
+    pos = next((p for p in state["positions"] if p["symbol"] == symbol), None)
     if not pos:
         return {"error": f"No position on {symbol}"}
-    await exit_position(pos, "CHIUSURA MANUALE")
+    await exit_position(state, pos, "CHIUSURA MANUALE")
     return {"ok": True}
 
 @app.post("/chat")
@@ -834,8 +805,9 @@ async def chat(body: dict):
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         return {"error": "API key non configurata"}
-    positions = agent_state["positions"]
-    pnl = agent_state["currentCapital"] - agent_state["capital"]
+    state = get_session(0)  # chat senza auth per ora
+    positions = state["positions"]
+    pnl = state["currentCapital"] - state["capital"]
     if positions:
         pos_desc = ", ".join([f"{p['symbol']} @ ${p['entryPrice']:.4f}" for p in positions])
     else:
@@ -861,11 +833,21 @@ def health():
     return {"status": "ok", "coinbase": any(d["price"] > 0 for d in market_data.values())}
 
 @app.get("/test_coinbase")
-async def test_coinbase():
-    if not COINBASE_API_KEY:
-        return {"ok": False, "error": "CB_KEY non configurata"}
+async def test_coinbase(user_id: int = Depends(get_current_user)):
+    cb_key, cb_secret = _ENV_CB_KEY, _ENV_CB_SECRET
+    if db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                row = await conn.fetchrow("SELECT cb_key, cb_secret FROM users WHERE id = $1", user_id)
+                if row and row["cb_key"]:
+                    cb_key    = row["cb_key"]
+                    cb_secret = row["cb_secret"]
+        except Exception as e:
+            print(f"DB error: {e}")
+    if not cb_key:
+        return {"ok": False, "error": "API key non configurata"}
     try:
-        result = await coinbase_request("GET", "/api/v3/brokerage/accounts")
+        result = await coinbase_request("GET", "/api/v3/brokerage/accounts", cb_key=cb_key, cb_secret=cb_secret)
         accounts = result.get("accounts", [])
         balances = [
             {"currency": a["currency"], "available": a["available_balance"]["value"]}
@@ -1010,7 +992,7 @@ async def get_logos():
 @app.get("/debug_products")
 async def debug_products():
     """Debug: mostra i prodotti USD tradabili su Coinbase Advanced"""
-    if not COINBASE_API_KEY:
+    if not _ENV_CB_KEY:
         return {"error": "CB_KEY non configurata"}
     try:
         result = await coinbase_request("GET", "/api/v3/brokerage/market/products?product_type=SPOT&limit=500")
