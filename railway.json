@@ -1,5 +1,5 @@
 {
   "deploy": {
-    "startCommand": "pip install fastapi uvicorn httpx pyjwt cryptography asyncpg bcrypt && python -c \"import urllib.request, time; urllib.request.urlretrieve('https://raw.githubusercontent.com/SavoFats/crypto-agent-back/main/main.py?t=' + str(int(time.time())), 'app.py')\" && uvicorn app:app --host 0.0.0.0 --port $PORT"
+    "startCommand": "pip install fastapi uvicorn httpx pyjwt cryptography asyncpg bcrypt && python -c \"import urllib.request, time; urllib.request.urlretrieve('https://raw.githubusercontent.com/SavoFats/crypto-agent-back/staging/main.py?t=' + str(int(time.time())), 'app.py')\" && uvicorn app:app --host 0.0.0.0 --port $PORT"
   }
 }
