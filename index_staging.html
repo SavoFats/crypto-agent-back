@@ -1161,6 +1161,7 @@ async function stopAgent() {
   document.getElementById('stopBtn').disabled = true;
   if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
   _sessionEndTs = null;
+  window._lastStatus = null;
   unlockConfig();
 }
 
@@ -1216,6 +1217,8 @@ async function poll() {
       document.getElementById('startBtn').disabled = false;
       document.getElementById('stopBtn').disabled = true;
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      // Azzera posizioni per evitare badge IN rimasti
+      if (window._lastStatus) window._lastStatus.positions = [];
       unlockConfig();
     }
     render();
