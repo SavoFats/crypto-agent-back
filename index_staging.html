@@ -1349,8 +1349,8 @@ function render() {
   pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
   pnlEl.style.color = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
 
-  // KPI capitale
-  const cap = (S.currentCapital||0) + (S.positions||[]).reduce((a,p)=>a+p.size,0) + pnl;
+  // KPI capitale — il backend restituisce già pnl = total - capital
+  const cap = (S.capital||0) + pnl;
   const capEl = document.getElementById('kpiCapital');
   capEl.textContent = '$' + cap.toFixed(2);
   capEl.className = 'kpi-value' + (pnl > 0 ? ' up' : pnl < 0 ? ' down' : '');
