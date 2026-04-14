@@ -38,7 +38,10 @@
   --radius-sm: 10px;
 }
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body { background:var(--bg); color:var(--text); font-family:var(--sans); height:100dvh; overflow:hidden; -webkit-font-smoothing:antialiased; }
+body { background:var(--bg); color:var(--text); font-family:var(--sans); height:100dvh; overflow:hidden; overflow-x:hidden; -webkit-font-smoothing:antialiased; }
+html { overflow-x:hidden; }
+.pages { visibility:hidden; }
+.pages.ready { visibility:visible; }
 ::-webkit-scrollbar { width:0; }
 
 .hdr { position:fixed; top:0; left:0; right:0; height:calc(var(--hdr-h) + var(--safe-t)); padding-top:var(--safe-t); background:var(--bg); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding-left:20px; padding-right:16px; z-index:100; }
@@ -1228,6 +1231,8 @@ async function startupSession() {
   } catch(e) {}
   // Ripristina la tab in cui l'utente era prima del refresh
   restoreActiveTab();
+  // Rimuovi invisibilità ora che la tab corretta è attiva — evita flash di config
+  document.querySelector('.pages').classList.add('ready');
   startPolling();
 }
 
@@ -1428,6 +1433,7 @@ function drawChart() {
 
 // ── MERCATO ───────────────────────────────────────────────────────────────────
 let mktData=[], mktSort='change24h', mktFilter='all';
+const _emaCache = {};
 
 function setMktSort(key, btn) {
   mktSort = key;
@@ -1467,10 +1473,14 @@ function renderMarket() {
     if (ema) {
       const dot = (on, label) => `<div class="ema-dot-wrap"><div class="ema-dot ${on?'on':'off'}"></div><span class="ema-dot-label">${label}</span></div>`;
       const signalDot = ema.signal ? `<div class="ema-dot-wrap" style="margin-left:2px"><div class="ema-dot signal"></div><span class="ema-dot-label" style="color:var(--blue)">IN</span></div>` : '';
+      const emaId = 'ema_' + c.symbol;
+      _emaCache[emaId] = ema;
       emaDots = `<div class="ema-dots" 
-        onmouseenter="showEmaTooltip(this,${JSON.stringify(ema)},'${c.symbol}')"
+        data-emaid="${emaId}"
+        data-sym="${c.symbol}"
+        onmouseenter="showEmaTooltipById(this)"
         onmouseleave="hideEmaTooltip()"
-        ontouchstart="showEmaTooltip(this,${JSON.stringify(ema)},'${c.symbol}')"
+        ontouchstart="showEmaTooltipById(this);event.stopPropagation()"
         style="cursor:pointer"
       >${dot(ema.trend,'trend')}${dot(ema.pullback,'pull')}${dot(ema.volume,'vol')}${dot(ema.stop,'R')}${signalDot}</div>`;
     }
@@ -1517,6 +1527,14 @@ async function refreshMarket() {
 
 // ── EMA TOOLTIP ───────────────────────────────────────────────────────────────
 let _tooltipTimeout = null;
+
+function showEmaTooltipById(el) {
+  const emaId = el.dataset.emaid;
+  const sym = el.dataset.sym;
+  const ema = _emaCache[emaId];
+  if (!ema) return;
+  showEmaTooltip(el, ema, sym);
+}
 
 function showEmaTooltip(el, ema, sym) {
   if (!ema) return;
