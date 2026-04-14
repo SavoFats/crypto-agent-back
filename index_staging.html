@@ -270,6 +270,11 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 
 .empty { text-align:center; padding:48px 20px; color:var(--text3); }
 
+/* Dropdown filtri custom */
+.filter-select { background:var(--surface2); border:1.5px solid var(--border); border-radius:20px; padding:6px 28px 6px 12px; color:var(--text2); font-size:12px; font-weight:600; font-family:var(--sans); cursor:pointer; outline:none; -webkit-appearance:none; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239aa0b2' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; transition:all 0.15s; white-space:nowrap; }
+.filter-select:focus { border-color:var(--blue); color:var(--text); }
+[data-theme="dark"] .filter-select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%235a5f74' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+
 /* Mini-log agente nel monitor */
 .agent-msg { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
 .agent-msg:last-child { border-bottom:none; }
@@ -423,13 +428,13 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
   <div class="page active" id="page-config">
 
     <div class="mode-container" style="margin:0 0 16px">
-      <div class="mode-label">Modalita</div>
+      <div class="mode-label">Modalità</div>
       <div class="mode-row">
         <button class="mode-btn" id="modeSimBtn" onclick="setMode(false)">
-          <span style="font-size:16px">&#9898;</span> Simulazione
+          Simulazione
         </button>
         <button class="mode-btn" id="modeRealBtn" onclick="setMode(true)">
-          <span style="font-size:16px">&#128308;</span> Reale
+          Reale
         </button>
       </div>
       <div class="mode-hint" id="modeHint">Seleziona la modalita per iniziare</div>
@@ -606,15 +611,21 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
           onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
         <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px">&#128269;</span>
       </div>
-      <div class="filter-row" id="allFiltersRow" style="gap:6px;flex-shrink:0">
-        <button class="filter-btn active" id="sortBtn24h" onclick="setMktSort('change24h',this)">24h %</button>
-        <button class="filter-btn" id="sortBtn1h" onclick="setMktSort('change1h',this)">1h %</button>
-        <button class="filter-btn" id="sortBtnVol" onclick="setMktSort('volume24h',this)">Volume</button>
-        <button class="filter-btn" id="sortBtnPrice" onclick="setMktSort('price',this)">Prezzo</button>
-        <div style="width:1px;background:var(--border);margin:0 2px;flex-shrink:0"></div>
-        <button class="filter-btn active" id="filterBtnAll" onclick="setMktFilter('all',this)">Tutti</button>
-        <button class="filter-btn gain" id="filterBtnGain" onclick="setMktFilter('gainers',this)">Rialzo</button>
-        <button class="filter-btn loss" id="filterBtnLoss" onclick="setMktFilter('losers',this)">Ribasso</button>
+      <div style="display:flex;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+        <select id="mktSortVariation" class="filter-select" onchange="setMktSortDropdown('variation', this.value)">
+          <option value="change24h">24h %</option>
+          <option value="change1h">1h %</option>
+        </select>
+        <select id="mktSortMetric" class="filter-select" onchange="setMktSortDropdown('metric', this.value)">
+          <option value="">Ordina per</option>
+          <option value="volume24h">Volume</option>
+          <option value="price">Prezzo</option>
+        </select>
+        <select id="mktFilterDir" class="filter-select" onchange="setMktFilterDropdown(this.value)">
+          <option value="all">Tutti</option>
+          <option value="gainers">Rialzo</option>
+          <option value="losers">Ribasso</option>
+        </select>
       </div>
       <div id="marketList"><div class="empty"><div class="empty-icon">&#128225;</div><div class="empty-text">Caricamento...</div></div></div>
     </div>
@@ -624,20 +635,20 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
   <div class="page" id="page-transazioni">
 
     <!-- Filtri dropdown -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
-      <select id="tfPeriod" onchange="setTxDropdown('period',this.value)" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:9px 10px;color:var(--text);font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer;outline:none;-webkit-appearance:none;text-align:center">
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <select id="tfPeriod" class="filter-select" onchange="setTxDropdown('period',this.value)">
         <option value="today">Oggi</option>
         <option value="week">7 giorni</option>
         <option value="month">30 giorni</option>
         <option value="6m">6 mesi</option>
         <option value="all">Sempre</option>
       </select>
-      <select id="tfOutcome" onchange="setTxDropdown('outcome',this.value)" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:9px 10px;color:var(--text);font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer;outline:none;-webkit-appearance:none;text-align:center">
+      <select id="tfOutcome" class="filter-select" onchange="setTxDropdown('outcome',this.value)">
         <option value="all">Tutti</option>
         <option value="win">Profitto</option>
         <option value="loss">Perdita</option>
       </select>
-      <select id="tfReason" onchange="setTxDropdown('reason',this.value)" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:9px 10px;color:var(--text);font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer;outline:none;-webkit-appearance:none;text-align:center">
+      <select id="tfReason" class="filter-select" onchange="setTxDropdown('reason',this.value)">
         <option value="all">Motivazione</option>
         <option value="sl">Stop Loss</option>
         <option value="tp1">Take Profit</option>
@@ -660,7 +671,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     </div>
 
     <!-- Lista -->
-    <div id="transazioniList"><div class="empty"><div class="empty-icon">&#128202;</div><div class="empty-text">Nessun trade ancora</div></div></div>
+    <div id="transazioniList"><div class="empty"><div class="empty-text">Nessuna transazione</div></div></div>
   </div>
 
 </div>
@@ -1540,7 +1551,7 @@ function applyTxFilters(list) {
 function renderTransazioni() {
   const list = document.getElementById('transazioniList');
   if (!trades.length) {
-    list.innerHTML = '<div class="empty"><div class="empty-icon">&#128202;</div><div class="empty-text">Nessun trade ancora</div></div>';
+    list.innerHTML = '<div class="empty"><div class="empty-text">Nessuna transazione</div></div>';
     document.getElementById('txCount').textContent = '0';
     document.getElementById('txWinRate').textContent = '--%';
     document.getElementById('txPnl').textContent = 'P&L: --';
@@ -1561,7 +1572,7 @@ function renderTransazioni() {
   document.getElementById('txWinLoss').textContent = wins + ' vittorie · ' + losses + ' sconfitte';
 
   if (!filtered.length) {
-    list.innerHTML = '<div class="empty"><div class="empty-icon">&#128229;</div><div class="empty-text">Nessun trade corrisponde ai filtri</div></div>';
+    list.innerHTML = '<div class="empty"><div class="empty-text">Nessuna transazione</div></div>';
     return;
   }
 
@@ -1654,22 +1665,24 @@ function drawChart() {
 let mktData=[], mktSort='change24h', mktFilter='all';
 const _emaCache = {};
 
-function setMktSort(key, btn) {
-  mktSort = key;
-  ['sortBtn24h','sortBtn1h','sortBtnVol','sortBtnPrice'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('active');
-  });
-  btn.classList.add('active');
+function setMktSort(key, btn) { mktSort = key; renderMarket(); }
+function setMktFilter(key, btn) { mktFilter = key; renderMarket(); }
+
+function setMktSortDropdown(type, val) {
+  if (type === 'variation') {
+    mktSort = val;
+    // reset metric dropdown
+    const m = document.getElementById('mktSortMetric');
+    if (m) m.value = '';
+  } else if (type === 'metric' && val) {
+    mktSort = val;
+    // reset variation dropdown to show it's overridden
+  }
   renderMarket();
 }
-function setMktFilter(key, btn) {
-  mktFilter = key;
-  ['filterBtnAll','filterBtnGain','filterBtnLoss'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('active');
-  });
-  btn.classList.add('active');
+
+function setMktFilterDropdown(val) {
+  mktFilter = val;
   renderMarket();
 }
 
