@@ -857,8 +857,11 @@ async def startup():
                         cb_secret TEXT DEFAULT '',
                         telegram_chat_id TEXT DEFAULT '',
                         avatar_b64 TEXT DEFAULT '',
+                        sim_mode BOOLEAN DEFAULT TRUE,
                         created_at TIMESTAMP DEFAULT NOW()
                     );
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS sim_mode BOOLEAN DEFAULT TRUE;
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_b64 TEXT DEFAULT '';
                     CREATE TABLE IF NOT EXISTS trades_history (
                         id SERIAL PRIMARY KEY,
                         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -998,13 +1001,37 @@ async def get_me(user_id: int = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Database non disponibile")
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT username, cb_key, avatar_b64 FROM users WHERE id = $1", user_id
+            "SELECT username, cb_key, avatar_b64, sim_mode FROM users WHERE id = $1", user_id
         )
+    has_keys = bool(row["cb_key"])
+    sim = row["sim_mode"] if row["sim_mode"] is not None else True
+    # Se non ha API keys, forza sempre simulazione
+    if not has_keys:
+        sim = True
     return {
         "username": row["username"],
-        "has_api_keys": bool(row["cb_key"]),
-        "avatar_b64": row["avatar_b64"] or ""
+        "has_api_keys": has_keys,
+        "avatar_b64": row["avatar_b64"] or "",
+        "sim_mode": sim
     }
+
+class SimModeRequest(BaseModel):
+    sim_mode: bool
+
+@app.post("/auth/sim_mode")
+async def set_sim_mode(req: SimModeRequest, user_id: int = Depends(get_current_user)):
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="DB non disponibile")
+    async with db_pool.acquire() as conn:
+        # Verifica che l'utente abbia API keys prima di permettere reale
+        row = await conn.fetchrow("SELECT cb_key FROM users WHERE id = $1", user_id)
+        if not row["cb_key"] and not req.sim_mode:
+            raise HTTPException(status_code=400, detail="API keys richieste per modalità reale")
+        await conn.execute(
+            "UPDATE users SET sim_mode = $1 WHERE id = $2",
+            req.sim_mode, user_id
+        )
+    return {"ok": True, "sim_mode": req.sim_mode}
 
 # ── TRADES HISTORY ─────────────────────────────────────────────────────────────
 
@@ -1111,14 +1138,17 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
     cfg     = body.get("config", {})
     capital = float(cfg.get("capital", 1000))
 
-    cb_key, cb_secret = "", ""
+    cb_key, cb_secret, real_mode = "", "", False
     if db_pool:
         try:
             async with db_pool.acquire() as conn:
-                row = await conn.fetchrow("SELECT cb_key, cb_secret FROM users WHERE id = $1", user_id)
+                row = await conn.fetchrow(
+                    "SELECT cb_key, cb_secret, sim_mode FROM users WHERE id = $1", user_id)
                 if row:
                     cb_key    = row["cb_key"] or ""
                     cb_secret = row["cb_secret"] or ""
+                    sim = row["sim_mode"] if row["sim_mode"] is not None else True
+                    real_mode = bool(cb_key) and not sim
         except Exception as e:
             print(f"DB key fetch error: {e}")
 
@@ -1136,7 +1166,7 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
             "cooldown":            float(cfg.get("cooldown", 1)),
             "minVolume":           float(cfg.get("minVolume", 0)),
             "sessionDuration":     int(cfg.get("sessionDuration", 8)),
-            "realMode":            bool(cfg.get("realMode", False)),
+            "realMode":            real_mode,
             "emaFilter":           bool(cfg.get("emaFilter", True)),
             "pullbackTolerance":   float(cfg.get("pullbackTolerance", 0.015)),
             "volMultiplier":       float(cfg.get("volMultiplier", 1.2)),
@@ -1150,7 +1180,7 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
     })
     alloc  = float(cfg.get("allocPct", 0.20)) * 100
     vol    = float(cfg.get("minVolume", 0)) / 1_000_000
-    mode   = "REALE" if cfg.get("realMode", False) else "SIMULAZIONE"
+    mode   = "REALE" if real_mode else "SIMULAZIONE"
     ema_s  = "ON" if cfg.get("emaFilter", True) else "OFF"
     ptol   = float(cfg.get("pullbackTolerance", 0.015)) * 100
     mt     = int(cfg.get("maxTrades", 0))
