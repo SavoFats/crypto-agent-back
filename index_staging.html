@@ -271,9 +271,16 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 .empty { text-align:center; padding:48px 20px; color:var(--text3); }
 
 /* Dropdown filtri custom */
-.filter-select { background:var(--surface2); border:1.5px solid var(--border); border-radius:20px; padding:6px 28px 6px 12px; color:var(--text2); font-size:12px; font-weight:600; font-family:var(--sans); cursor:pointer; outline:none; -webkit-appearance:none; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239aa0b2' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; transition:all 0.15s; white-space:nowrap; }
-.filter-select:focus { border-color:var(--blue); color:var(--text); }
-[data-theme="dark"] .filter-select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%235a5f74' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.fdd { position:relative; display:inline-block; }
+.fdd-btn { display:flex; align-items:center; gap:6px; padding:6px 12px; background:var(--surface2); border:1.5px solid var(--border); border-radius:20px; font-size:12px; font-weight:600; color:var(--text2); cursor:pointer; font-family:var(--sans); transition:all 0.15s; white-space:nowrap; user-select:none; }
+.fdd-btn.active { border-color:var(--blue); color:var(--blue); background:var(--blue-dim); }
+.fdd-btn svg { flex-shrink:0; transition:transform 0.15s; }
+.fdd-btn.open svg { transform:rotate(180deg); }
+.fdd-menu { position:fixed; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:4px; z-index:500; min-width:140px; box-shadow:0 8px 24px rgba(0,0,0,0.12); display:none; }
+.fdd-menu.open { display:block; }
+.fdd-item { padding:9px 12px; font-size:13px; font-weight:600; color:var(--text2); border-radius:8px; cursor:pointer; transition:background 0.1s; white-space:nowrap; }
+.fdd-item:hover, .fdd-item:active { background:var(--surface2); }
+.fdd-item.selected { color:var(--blue); }
 
 /* Mini-log agente nel monitor */
 .agent-msg { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
@@ -611,21 +618,30 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
           onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
         <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px">&#128269;</span>
       </div>
-      <div style="display:flex;gap:8px;margin-bottom:4px;flex-wrap:wrap">
-        <select id="mktSortVariation" class="filter-select" onchange="setMktSortDropdown('variation', this.value)">
-          <option value="change24h">24h %</option>
-          <option value="change1h">1h %</option>
-        </select>
-        <select id="mktSortMetric" class="filter-select" onchange="setMktSortDropdown('metric', this.value)">
-          <option value="">Ordina per</option>
-          <option value="volume24h">Volume</option>
-          <option value="price">Prezzo</option>
-        </select>
-        <select id="mktFilterDir" class="filter-select" onchange="setMktFilterDropdown(this.value)">
-          <option value="all">Tutti</option>
-          <option value="gainers">Rialzo</option>
-          <option value="losers">Ribasso</option>
-        </select>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <div class="fdd" id="fddMktVar">
+          <div class="fdd-btn active" onclick="toggleFdd('fddMktVar')" id="fddMktVarBtn">24h % <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+          <div class="fdd-menu" id="fddMktVarMenu">
+            <div class="fdd-item selected" onclick="selectFddMkt('fddMktVar','change24h','24h %','var')">24h %</div>
+            <div class="fdd-item" onclick="selectFddMkt('fddMktVar','change1h','1h %','var')">1h %</div>
+          </div>
+        </div>
+        <div class="fdd" id="fddMktMetric">
+          <div class="fdd-btn" onclick="toggleFdd('fddMktMetric')" id="fddMktMetricBtn">Ordina <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+          <div class="fdd-menu" id="fddMktMetricMenu">
+            <div class="fdd-item selected" onclick="selectFddMkt('fddMktMetric','change24h','Ordina','metric')">Default</div>
+            <div class="fdd-item" onclick="selectFddMkt('fddMktMetric','volume24h','Volume','metric')">Volume</div>
+            <div class="fdd-item" onclick="selectFddMkt('fddMktMetric','price','Prezzo','metric')">Prezzo</div>
+          </div>
+        </div>
+        <div class="fdd" id="fddMktDir">
+          <div class="fdd-btn" onclick="toggleFdd('fddMktDir')" id="fddMktDirBtn">Tutti <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+          <div class="fdd-menu" id="fddMktDirMenu">
+            <div class="fdd-item selected" onclick="selectFddMkt('fddMktDir','all','Tutti','dir')">Tutti</div>
+            <div class="fdd-item" onclick="selectFddMkt('fddMktDir','gainers','Rialzo','dir')">Rialzo</div>
+            <div class="fdd-item" onclick="selectFddMkt('fddMktDir','losers','Ribasso','dir')">Ribasso</div>
+          </div>
+        </div>
       </div>
       <div id="marketList"><div class="empty"><div class="empty-icon">&#128225;</div><div class="empty-text">Caricamento...</div></div></div>
     </div>
@@ -634,26 +650,35 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
   <!-- TRANSAZIONI -->
   <div class="page" id="page-transazioni">
 
-    <!-- Filtri dropdown -->
+    <!-- Filtri dropdown custom -->
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-      <select id="tfPeriod" class="filter-select" onchange="setTxDropdown('period',this.value)">
-        <option value="today">Oggi</option>
-        <option value="week">7 giorni</option>
-        <option value="month">30 giorni</option>
-        <option value="6m">6 mesi</option>
-        <option value="all">Sempre</option>
-      </select>
-      <select id="tfOutcome" class="filter-select" onchange="setTxDropdown('outcome',this.value)">
-        <option value="all">Tutti</option>
-        <option value="win">Profitto</option>
-        <option value="loss">Perdita</option>
-      </select>
-      <select id="tfReason" class="filter-select" onchange="setTxDropdown('reason',this.value)">
-        <option value="all">Motivazione</option>
-        <option value="sl">Stop Loss</option>
-        <option value="tp1">Take Profit</option>
-        <option value="manual">Manuale</option>
-      </select>
+      <div class="fdd" id="fddPeriod">
+        <div class="fdd-btn" onclick="toggleFdd('fddPeriod')" id="fddPeriodBtn">Oggi <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div class="fdd-menu" id="fddPeriodMenu">
+          <div class="fdd-item selected" onclick="selectFdd('fddPeriod','today','Oggi','period')">Oggi</div>
+          <div class="fdd-item" onclick="selectFdd('fddPeriod','week','7 giorni','period')">7 giorni</div>
+          <div class="fdd-item" onclick="selectFdd('fddPeriod','month','30 giorni','period')">30 giorni</div>
+          <div class="fdd-item" onclick="selectFdd('fddPeriod','6m','6 mesi','period')">6 mesi</div>
+          <div class="fdd-item" onclick="selectFdd('fddPeriod','all','Sempre','period')">Sempre</div>
+        </div>
+      </div>
+      <div class="fdd" id="fddOutcome">
+        <div class="fdd-btn" onclick="toggleFdd('fddOutcome')" id="fddOutcomeBtn">Esito <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div class="fdd-menu" id="fddOutcomeMenu">
+          <div class="fdd-item selected" onclick="selectFdd('fddOutcome','all','Esito','outcome')">Tutti</div>
+          <div class="fdd-item" onclick="selectFdd('fddOutcome','win','Profitto','outcome')">Profitto</div>
+          <div class="fdd-item" onclick="selectFdd('fddOutcome','loss','Perdita','outcome')">Perdita</div>
+        </div>
+      </div>
+      <div class="fdd" id="fddReason">
+        <div class="fdd-btn" onclick="toggleFdd('fddReason')" id="fddReasonBtn">Motivazione <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div class="fdd-menu" id="fddReasonMenu">
+          <div class="fdd-item selected" onclick="selectFdd('fddReason','all','Motivazione','reason')">Tutte</div>
+          <div class="fdd-item" onclick="selectFdd('fddReason','sl','Stop Loss','reason')">Stop Loss</div>
+          <div class="fdd-item" onclick="selectFdd('fddReason','tp1','Take Profit','reason')">Take Profit</div>
+          <div class="fdd-item" onclick="selectFdd('fddReason','manual','Manuale','reason')">Manuale</div>
+        </div>
+      </div>
     </div>
 
     <!-- Stats -->
@@ -1664,6 +1689,76 @@ function drawChart() {
 // ── MERCATO ───────────────────────────────────────────────────────────────────
 let mktData=[], mktSort='change24h', mktFilter='all';
 const _emaCache = {};
+
+// ── DROPDOWN CUSTOM ───────────────────────────────────────────────────────────
+function toggleFdd(id) {
+  const menu = document.getElementById(id + 'Menu');
+  const btn = document.getElementById(id + 'Btn');
+  const isOpen = menu.classList.contains('open');
+  // Chiudi tutti
+  document.querySelectorAll('.fdd-menu.open').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('.fdd-btn.open').forEach(b => b.classList.remove('open'));
+  if (!isOpen) {
+    menu.classList.add('open');
+    btn.classList.add('open');
+    // Posiziona menu sotto il btn
+    const rect = btn.getBoundingClientRect();
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.left = rect.left + 'px';
+    setTimeout(() => document.addEventListener('click', closeFddOnOutside), 0);
+  }
+}
+
+function closeFddOnOutside(e) {
+  if (!e.target.closest('.fdd')) {
+    document.querySelectorAll('.fdd-menu.open').forEach(m => m.classList.remove('open'));
+    document.querySelectorAll('.fdd-btn.open').forEach(b => b.classList.remove('open'));
+    document.removeEventListener('click', closeFddOnOutside);
+  }
+}
+
+function selectFdd(fddId, val, label, filterType) {
+  // Aggiorna label bottone
+  const btn = document.getElementById(fddId + 'Btn');
+  const chevron = btn.querySelector('svg').outerHTML;
+  btn.innerHTML = label + ' ' + chevron;
+  // Marca selected
+  document.querySelectorAll('#' + fddId + 'Menu .fdd-item').forEach(i => i.classList.remove('selected'));
+  event.target.classList.add('selected');
+  // Chiudi menu
+  document.getElementById(fddId + 'Menu').classList.remove('open');
+  btn.classList.remove('open');
+  document.removeEventListener('click', closeFddOnOutside);
+  // Applica filtro
+  txFilters[filterType] = val;
+  // Evidenzia btn se non default
+  const defaults = { period: 'today', outcome: 'all', reason: 'all' };
+  btn.classList.toggle('active', val !== defaults[filterType]);
+  renderTransazioni();
+}
+
+function selectFddMkt(fddId, val, label, type) {
+  const btn = document.getElementById(fddId + 'Btn');
+  const chevron = btn.querySelector('svg').outerHTML;
+  btn.innerHTML = label + ' ' + chevron;
+  document.querySelectorAll('#' + fddId + 'Menu .fdd-item').forEach(i => i.classList.remove('selected'));
+  event.target.classList.add('selected');
+  document.getElementById(fddId + 'Menu').classList.remove('open');
+  btn.classList.remove('open');
+  document.removeEventListener('click', closeFddOnOutside);
+  if (type === 'var' || type === 'metric') {
+    mktSort = val;
+    // Se metric, resetta var highlight e viceversa
+    const varBtn = document.getElementById('fddMktVarBtn');
+    const metBtn = document.getElementById('fddMktMetricBtn');
+    if (type === 'var') { varBtn.classList.add('active'); metBtn.classList.remove('active'); }
+    else { metBtn.classList.add('active'); varBtn.classList.remove('active'); }
+  } else if (type === 'dir') {
+    mktFilter = val;
+    btn.classList.toggle('active', val !== 'all');
+  }
+  renderMarket();
+}
 
 function setMktSort(key, btn) { mktSort = key; renderMarket(); }
 function setMktFilter(key, btn) { mktFilter = key; renderMarket(); }
