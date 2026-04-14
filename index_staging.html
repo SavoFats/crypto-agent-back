@@ -1541,23 +1541,23 @@ let _tooltipTimeout = null;
 const EMA_DOT_INFO = {
   trend: {
     name: 'Trend',
-    descOn:  'EMA20 > EMA50 su 15min — il mercato è in tendenza rialzista. È il filtro principale: senza trend l'agente non entra.',
-    descOff: 'EMA20 < EMA50 su 15min — nessuna tendenza rialzista chiara. L'agente aspetta che il trend si formi prima di considerare ingressi.',
+    descOn:  "EMA20 > EMA50 su 15min — mercato in tendenza rialzista. Filtro principale: senza trend l'agente non entra.",
+    descOff: "EMA20 < EMA50 su 15min — nessuna tendenza rialzista chiara. L'agente aspetta che il trend si formi.",
   },
   pullback: {
     name: 'Pullback',
-    descOn:  'Il prezzo è tornato vicino a EMA20 su 5min (entro la soglia configurata). È il momento ottimale: trend attivo + prezzo che ritraccia.',
-    descOff: 'Il prezzo è troppo lontano da EMA20 su 5min. O è già salito troppo (FOMO) o è sceso sotto. L'agente aspetta il ritracciamento.',
+    descOn:  "Il prezzo è tornato vicino a EMA20 su 5min (entro la soglia configurata). Momento ottimale: trend attivo e prezzo che ritraccia.",
+    descOff: "Il prezzo è troppo lontano da EMA20 su 5min. O è già salito troppo (FOMO) o è sceso sotto. Attesa del ritracciamento.",
   },
   volume: {
     name: 'Volume',
-    descOn:  'Il volume dell'ultima candela 5min è superiore alla media delle ultime 20 candele × il moltiplicatore impostato. Conferma partecipazione reale.',
-    descOff: 'Volume insufficiente sull'ultima candela 5min. Un rimbalzo su volume basso è spesso falso — serve partecipazione reale per validare il segnale.',
+    descOn:  "Volume ultima candela 5min superiore alla media 20 candele x moltiplicatore impostato. Conferma partecipazione reale.",
+    descOff: "Volume insufficiente sull'ultima candela 5min. Un rimbalzo su volume basso è spesso falso — serve partecipazione reale.",
   },
   stop: {
     name: 'R (Stop)',
-    descOn:  'Lo stop contestuale (minimo pullback o 1×ATR) è dentro la soglia massima configurata. Il rischio/rendimento è favorevole.',
-    descOff: 'Lo stop richiesto è troppo largo rispetto alla soglia impostata. Entrare significherebbe rischiare troppo — il trade viene scartato.',
+    descOn:  "Lo stop contestuale (minimo pullback o 1xATR) è dentro la soglia massima configurata. Rischio/rendimento favorevole.",
+    descOff: "Stop richiesto troppo largo rispetto alla soglia impostata. Rischio eccessivo — il trade viene scartato.",
   },
 };
 
