@@ -375,7 +375,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 <div class="profile-menu" id="profileMenu">
   <div class="profile-menu-header">
     <div class="profile-menu-user" id="pmUsername">--</div>
-    <div class="profile-menu-sub" id="pmMode">Simulazione</div>
+    <div class="profile-menu-sub" id="pmMode" style="display:none"></div>
   </div>
   <div class="profile-menu-item" onclick="openApiKeysFromMenu()">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
@@ -627,10 +627,9 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
           </div>
         </div>
         <div class="fdd" id="fddMktMetric">
-          <div class="fdd-btn" onclick="toggleFdd('fddMktMetric')" id="fddMktMetricBtn">Ordina <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+          <div class="fdd-btn" onclick="toggleFdd('fddMktMetric')" id="fddMktMetricBtn">Volume <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
           <div class="fdd-menu" id="fddMktMetricMenu">
-            <div class="fdd-item selected" onclick="selectFddMkt('fddMktMetric','change24h','Ordina','metric')">Default</div>
-            <div class="fdd-item" onclick="selectFddMkt('fddMktMetric','volume24h','Volume','metric')">Volume</div>
+            <div class="fdd-item selected" onclick="selectFddMkt('fddMktMetric','volume24h','Volume','metric')">Volume</div>
             <div class="fdd-item" onclick="selectFddMkt('fddMktMetric','price','Prezzo','metric')">Prezzo</div>
           </div>
         </div>
@@ -787,7 +786,7 @@ function applyAvatar(src) {
 }
 function updateProfileMenu() {
   document.getElementById('pmUsername').textContent = _username || '--';
-  document.getElementById('pmMode').textContent = (window._realMode ? 'Modalità Reale 🔴' : 'Simulazione 🔵');
+  // pmMode rimosso
 }
 
 // ── MODAL CONFERMA ────────────────────────────────────────────────────────────
@@ -1687,7 +1686,7 @@ function drawChart() {
 }
 
 // ── MERCATO ───────────────────────────────────────────────────────────────────
-let mktData=[], mktSort='change24h', mktFilter='all';
+let mktData=[], mktSort='volume24h', mktFilter='all';
 const _emaCache = {};
 
 // ── DROPDOWN CUSTOM ───────────────────────────────────────────────────────────
