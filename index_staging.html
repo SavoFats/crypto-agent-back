@@ -84,7 +84,7 @@ html { overflow-x:hidden; }
 .toggle-switch.on::after { transform:translateX(18px); }
 
 /* Modal conferma custom */
-.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:400; display:flex; align-items:flex-end; justify-content:center; padding-bottom:calc(var(--safe-b) + 16px); opacity:0; pointer-events:none; transition:opacity 0.2s; }
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:400; display:flex; align-items:center; justify-content:center; padding:24px; opacity:0; pointer-events:none; transition:opacity 0.2s; }
 .modal-overlay.open { opacity:1; pointer-events:all; }
 .modal-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:24px; width:100%; max-width:420px; transform:translateY(20px); transition:transform 0.2s; }
 .modal-overlay.open .modal-card { transform:translateY(0); }
