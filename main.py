@@ -515,7 +515,7 @@ async def enter_position(state: dict, sym_data: dict):
     }
     state["positions"].append(pos)
 
-async def exit_position(state: dict, pos: dict, reason: str, partial: bool = False):
+async def exit_position(state: dict, pos: dict, reason: str, partial: bool = False, user_id: int = None):
     """
     Se partial=True: chiude il 50% della posizione (TP1).
     Se partial=False: chiude tutto.
@@ -588,14 +588,33 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
 
     cfg = state["config"]
     state["cooldowns"][sym] = (datetime.now().timestamp() + cfg.get("cooldown", 1) * 3600) * 1000
-    state["trades"].append({
+    trade_record = {
         "symbol": sym, "reason": reason,
         "entryPrice": pos["entryPrice"], "exitPrice": cur,
-        "pnl": pnl, "pct": pct, "time": datetime.now().isoformat(),
+        "pnl": pnl, "pct": pct, "time": datetime.utcnow().isoformat() + "Z",
         "entryTime": pos["entryTime"], "durationMin": round(dur, 1),
         "size": pos["size"], "realMode": pos.get("realMode", False),
         "tp1_hit": pos.get("tp1_hit", False),
-    })
+    }
+    state["trades"].append(trade_record)
+    # Salva su DB se disponibile
+    if db_pool and user_id:
+        try:
+            async with db_pool.acquire() as conn:
+                await conn.execute("""
+                    INSERT INTO trades_history
+                    (user_id, symbol, entry_price, exit_price, size, pnl, pct,
+                     reason, tp1_hit, duration_min, entry_time, exit_time, mode)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                """, user_id, sym,
+                    float(pos["entryPrice"]), float(cur),
+                    float(pos["size"]), float(pnl), float(pct),
+                    reason, bool(pos.get("tp1_hit", False)), float(round(dur, 1)),
+                    pos["entryTime"], datetime.utcnow().isoformat() + "Z",
+                    "real" if pos.get("realMode") else "sim"
+                )
+        except Exception as e:
+            print(f"DB trade save error: {e}")
     state["positions"] = [p for p in state["positions"] if p is not pos]
     mode = "REALE" if pos.get("realMode") else "SIM"
     add_log(state, "sell", f"{reason} {mode}",
@@ -616,7 +635,7 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
 
 # ── main loop ─────────────────────────────────────────────────────────────────
 
-async def scan_and_trade(state: dict):
+async def scan_and_trade(state: dict, user_id: int = None):
     if not state["running"]:
         return
     cfg = state["config"]
@@ -625,7 +644,7 @@ async def scan_and_trade(state: dict):
     if elapsed_ms >= state["sessionDuration"]:
         state["running"] = False
         for p in list(state["positions"]):
-            await exit_position(state, p, "SESSIONE SCADUTA")
+            await exit_position(state, p, "SESSIONE SCADUTA", user_id=user_id)
         add_log(state, "info", "FINE SESSIONE", "Durata massima raggiunta.")
         return
 
@@ -649,18 +668,18 @@ async def scan_and_trade(state: dict):
 
         # TP1: prima volta che tocca +1R
         if not pos.get("tp1_hit", False) and cur >= pos["tp1Price"]:
-            await exit_position(state, pos, "TP1", partial=True)
+            await exit_position(state, pos, "TP1", partial=True, user_id=user_id)
             continue
 
         # TP2: tocca +1.5R → chiude tutto il rimanente
         if pos.get("tp1_hit", False) and cur >= pos["tp2Price"]:
-            await exit_position(state, pos, "TP2")
+            await exit_position(state, pos, "TP2", user_id=user_id)
             continue
 
         # Stop loss (include breakeven dopo TP1)
         if cur <= pos["stopPrice"]:
             reason = "STOP BREAKEVEN" if pos.get("tp1_hit") else "STOP LOSS"
-            await exit_position(state, pos, reason)
+            await exit_position(state, pos, reason, user_id=user_id)
 
     alloc_pct = cfg.get("allocPct", 0.20)
     max_pos   = max(1, int(round(1 / alloc_pct)))
@@ -782,7 +801,7 @@ async def poll_telegram():
                     sym = parts[1].upper()
                     pos = next((p for p in tg_state["positions"] if p["symbol"] == sym), None)
                     if pos:
-                        await exit_position(tg_state, pos, "TELEGRAM")
+                        await exit_position(tg_state, pos, "TELEGRAM")  # no user_id in telegram context
                         await send_telegram("Posizione " + sym + " chiusa via Telegram")
                     else:
                         await send_telegram("Nessuna posizione aperta su " + sym)
@@ -811,9 +830,9 @@ async def background_loop():
             if time.time() - _candles_last_update >= CANDLE_UPDATE_INTERVAL:
                 await fetch_all_candles()
 
-            for state in list(user_sessions.values()):
+            for uid, state in list(user_sessions.items()):
                 if state["running"]:
-                    await scan_and_trade(state)
+                    await scan_and_trade(state, user_id=uid)
             await poll_telegram()
         except Exception as e:
             import traceback
@@ -837,7 +856,31 @@ async def startup():
                         cb_key TEXT DEFAULT '',
                         cb_secret TEXT DEFAULT '',
                         telegram_chat_id TEXT DEFAULT '',
+                        avatar_b64 TEXT DEFAULT '',
                         created_at TIMESTAMP DEFAULT NOW()
+                    );
+                    CREATE TABLE IF NOT EXISTS trades_history (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                        symbol TEXT NOT NULL,
+                        entry_price FLOAT NOT NULL,
+                        exit_price FLOAT NOT NULL,
+                        size FLOAT NOT NULL,
+                        pnl FLOAT NOT NULL,
+                        pct FLOAT NOT NULL,
+                        reason TEXT NOT NULL,
+                        tp1_hit BOOLEAN DEFAULT FALSE,
+                        duration_min FLOAT DEFAULT 0,
+                        entry_time TEXT NOT NULL,
+                        exit_time TEXT NOT NULL,
+                        mode TEXT DEFAULT 'sim',
+                        created_at TIMESTAMP DEFAULT NOW()
+                    );
+                    CREATE TABLE IF NOT EXISTS watchlist (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                        symbol TEXT NOT NULL,
+                        UNIQUE(user_id, symbol)
                     )
                 """)
             print("Database connesso e schema creato")
@@ -895,15 +938,86 @@ async def save_keys(req: ApiKeyRequest, user_id: int = Depends(get_current_user)
         )
     return {"ok": True}
 
+# ── WATCHLIST ─────────────────────────────────────────────────────────────────
+
+@app.get("/watchlist")
+async def get_watchlist(user_id: int = Depends(get_current_user)):
+    if not db_pool:
+        return {"symbols": []}
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("SELECT symbol FROM watchlist WHERE user_id = $1", user_id)
+    return {"symbols": [r["symbol"] for r in rows]}
+
+@app.post("/watchlist/{symbol}")
+async def add_watchlist(symbol: str, user_id: int = Depends(get_current_user)):
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="DB non disponibile")
+    async with db_pool.acquire() as conn:
+        try:
+            await conn.execute(
+                "INSERT INTO watchlist (user_id, symbol) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                user_id, symbol.upper()
+            )
+        except Exception:
+            pass
+    return {"ok": True}
+
+@app.delete("/watchlist/{symbol}")
+async def remove_watchlist(symbol: str, user_id: int = Depends(get_current_user)):
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="DB non disponibile")
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM watchlist WHERE user_id = $1 AND symbol = $2",
+            user_id, symbol.upper()
+        )
+    return {"ok": True}
+
+# ── AVATAR ─────────────────────────────────────────────────────────────────────
+
+class AvatarRequest(BaseModel):
+    avatar_b64: str
+
+@app.post("/auth/avatar")
+async def save_avatar(req: AvatarRequest, user_id: int = Depends(get_current_user)):
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="DB non disponibile")
+    # Limita a 500KB
+    if len(req.avatar_b64) > 700000:
+        raise HTTPException(status_code=400, detail="Immagine troppo grande (max 500KB)")
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET avatar_b64 = $1 WHERE id = $2",
+            req.avatar_b64, user_id
+        )
+    return {"ok": True}
+
 @app.get("/auth/me")
 async def get_me(user_id: int = Depends(get_current_user)):
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database non disponibile")
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT username, cb_key FROM users WHERE id = $1", user_id
+            "SELECT username, cb_key, avatar_b64 FROM users WHERE id = $1", user_id
         )
-    return {"username": row["username"], "has_api_keys": bool(row["cb_key"])}
+    return {
+        "username": row["username"],
+        "has_api_keys": bool(row["cb_key"]),
+        "avatar_b64": row["avatar_b64"] or ""
+    }
+
+# ── TRADES HISTORY ─────────────────────────────────────────────────────────────
+
+@app.get("/trades_history")
+async def get_trades_history(user_id: int = Depends(get_current_user)):
+    if not db_pool:
+        return {"trades": []}
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM trades_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 500",
+            user_id
+        )
+    return {"trades": [dict(r) for r in rows]}
 
 # ── TRADING ENDPOINTS ──────────────────────────────────────────────────────────
 
@@ -957,7 +1071,37 @@ def get_market():
 @app.get("/trades")
 async def get_trades(user_id: int = Depends(get_current_user)):
     state = get_session(user_id)
-    return {"trades": state["trades"]}
+    # Combina trades in memoria + storico DB (rimuovi duplicati per time+symbol)
+    mem_trades = state["trades"]
+    if db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT * FROM trades_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 500",
+                    user_id
+                )
+            db_trades = [{
+                "symbol": r["symbol"],
+                "entryPrice": r["entry_price"],
+                "exitPrice": r["exit_price"],
+                "pnl": r["pnl"],
+                "pct": r["pct"],
+                "reason": r["reason"],
+                "tp1_hit": r["tp1_hit"],
+                "durationMin": r["duration_min"],
+                "entryTime": r["entry_time"],
+                "time": r["exit_time"],
+                "realMode": r["mode"] == "real",
+                "size": r["size"],
+            } for r in rows]
+            # Merge: DB ha tutto, mem ha solo sessione corrente
+            # Usa DB come source of truth, aggiungi mem solo se non già in DB
+            db_keys = set((t["symbol"], t["time"]) for t in db_trades)
+            extra = [t for t in mem_trades if (t["symbol"], t["time"]) not in db_keys]
+            return {"trades": extra + db_trades}
+        except Exception as e:
+            print(f"DB trades fetch error: {e}")
+    return {"trades": mem_trades}
 
 @app.post("/start")
 async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
@@ -1024,7 +1168,7 @@ async def stop_agent(user_id: int = Depends(get_current_user)):
         return {"error": "Not running"}
     state["running"] = False
     for p in list(state["positions"]):
-        await exit_position(state, p, "STOP MANUALE")
+        await exit_position(state, p, "STOP MANUALE", user_id=user_id)
     pnl = state["currentCapital"] - state["capital"]
     add_log(state, "info", "STOP", f"P&L finale: {pnl:+.2f}$")
     return {"ok": True, "pnl": pnl}
@@ -1035,7 +1179,7 @@ async def close_symbol(symbol: str, user_id: int = Depends(get_current_user)):
     pos = next((p for p in state["positions"] if p["symbol"] == symbol), None)
     if not pos:
         return {"error": f"No position on {symbol}"}
-    await exit_position(state, pos, "CHIUSURA MANUALE")
+    await exit_position(state, pos, "CHIUSURA MANUALE", user_id=user_id)
     return {"ok": True}
 
 @app.post("/chat")
