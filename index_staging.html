@@ -601,7 +601,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 
     <div class="card">
       <div class="card-label" id="posTitle">Posizioni aperte</div>
-      <div id="positionsWrap"><div class="empty"><div class="empty-icon">&#128228;</div><div class="empty-text">Nessuna posizione aperta</div></div></div>
+      <div id="positionsWrap"><div class="empty"><div class="empty-text">Nessuna posizione aperta</div></div></div>
     </div>
     <div class="card">
       <div class="card-label">P&amp;L nel tempo</div>
@@ -616,7 +616,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
         <input type="text" id="mktSearch" placeholder="Cerca coin..." oninput="renderMarket()"
           style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px 11px 36px;color:var(--text);font-size:14px;font-family:var(--sans);outline:none"
           onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
-        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px">&#128269;</span>
+        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <div class="fdd" id="fddMktVar">
@@ -642,7 +642,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
           </div>
         </div>
       </div>
-      <div id="marketList"><div class="empty"><div class="empty-icon">&#128225;</div><div class="empty-text">Caricamento...</div></div></div>
+      <div id="marketList"><div class="empty"><div class="empty-text">Caricamento...</div></div></div>
     </div>
   </div>
 
@@ -1467,7 +1467,7 @@ function renderPositions() {
   const wrap = document.getElementById('positionsWrap');
   const pos = S.positions || [];
   document.getElementById('posTitle').textContent = 'Posizioni aperte' + (pos.length > 0 ? ' — ' + pos.length : '');
-  if (!pos.length) { wrap.innerHTML = '<div class="empty"><div class="empty-icon">&#128228;</div><div class="empty-text">Nessuna posizione aperta</div></div>'; return; }
+  if (!pos.length) { wrap.innerHTML = '<div class="empty"><div class="empty-text">Nessuna posizione aperta</div></div>'; return; }
   wrap.innerHTML = pos.map(p => {
     const pnl = (p.currentPrice - p.entryPrice) / p.entryPrice * (p.size_remaining || p.size);
     const pct = (p.currentPrice - p.entryPrice) / p.entryPrice * 100;
@@ -1793,7 +1793,7 @@ function renderMarket() {
   if (q) data=data.filter(c=>c.symbol.includes(q)||(getCoinName(c.symbol)||'').toUpperCase().includes(q));
   data.sort((a,b)=>b[mktSort]-a[mktSort]);
   const list = document.getElementById('marketList');
-  if (!data.length) { list.innerHTML='<div class="empty"><div class="empty-icon">&#128229;</div><div class="empty-text">Nessuna coin</div></div>'; return; }
+  if (!data.length) { list.innerHTML='<div class="empty"><div class="empty-text">Nessuna coin</div></div>'; return; }
   list.innerHTML = data.map(c => {
     const chg24=c.change24h||0, chg1h=c.change1h||0, vol=c.volume24h||0;
     const c24=chg24>=0?'var(--green)':'var(--red)'; const c1h=chg1h>=0?'var(--green)':'var(--red)';
