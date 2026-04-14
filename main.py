@@ -862,6 +862,7 @@ async def startup():
                     );
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS sim_mode BOOLEAN DEFAULT TRUE;
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_b64 TEXT DEFAULT '';
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT DEFAULT '';
                     CREATE TABLE IF NOT EXISTS trades_history (
                         id SERIAL PRIMARY KEY,
                         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -905,11 +906,11 @@ async def register(req: RegisterRequest):
     try:
         async with db_pool.acquire() as conn:
             row = await conn.fetchrow(
-                "INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id",
-                req.username.lower(), pw_hash
+                "INSERT INTO users (username, password_hash, display_name) VALUES ($1, $2, $3) RETURNING id",
+                req.username.lower(), pw_hash, req.username
             )
         token = create_token(row["id"])
-        return {"token": token, "username": req.username.lower(), "has_api_keys": False}
+        return {"token": token, "username": req.username, "has_api_keys": False}
     except asyncpg.UniqueViolationError:
         raise HTTPException(status_code=400, detail="Username già in uso")
 
@@ -928,7 +929,11 @@ async def login(req: LoginRequest):
         raise HTTPException(status_code=401, detail="Username o password errati")
     token = create_token(row["id"])
     has_keys = bool(row["cb_key"])
-    return {"token": token, "username": req.username.lower(), "has_api_keys": has_keys}
+    # Usa display_name se disponibile
+    async with db_pool.acquire() as conn2:
+        urow = await conn2.fetchrow("SELECT display_name FROM users WHERE id = $1", row["id"])
+    dname = (urow["display_name"] or req.username) if urow else req.username
+    return {"token": token, "username": dname, "has_api_keys": has_keys}
 
 @app.post("/auth/save_keys")
 async def save_keys(req: ApiKeyRequest, user_id: int = Depends(get_current_user)):
@@ -1001,15 +1006,16 @@ async def get_me(user_id: int = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Database non disponibile")
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT username, cb_key, avatar_b64, sim_mode FROM users WHERE id = $1", user_id
+            "SELECT username, display_name, cb_key, avatar_b64, sim_mode FROM users WHERE id = $1", user_id
         )
     has_keys = bool(row["cb_key"])
     sim = row["sim_mode"] if row["sim_mode"] is not None else True
     # Se non ha API keys, forza sempre simulazione
     if not has_keys:
         sim = True
+    dname = row["display_name"] or row["username"]
     return {
-        "username": row["username"],
+        "username": dname,
         "has_api_keys": has_keys,
         "avatar_b64": row["avatar_b64"] or "",
         "sim_mode": sim
