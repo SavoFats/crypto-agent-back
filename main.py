@@ -506,7 +506,7 @@ async def enter_position(state: dict, sym_data: dict):
         "size":        size,
         "size_remaining": size,        # per TP parziale
         "tp1_hit":     False,          # TP1 già raggiunto?
-        "entryTime":   datetime.now().isoformat(),
+        "entryTime":   datetime.utcnow().isoformat() + "Z",
         "stopPrice":   stop_price,
         "tp1Price":    tp1_price,
         "tp2Price":    tp2_price,
@@ -522,7 +522,7 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
     """
     cur  = pos["currentPrice"]
     sym  = pos["symbol"]
-    dur  = (datetime.now() - datetime.fromisoformat(pos["entryTime"])).total_seconds() / 60
+    dur  = (datetime.utcnow() - datetime.fromisoformat(pos["entryTime"].replace("Z", ""))).total_seconds() / 60
 
     # Dimensione effettiva da chiudere
     close_size = pos["size_remaining"] * 0.5 if partial else pos["size_remaining"]
@@ -939,19 +939,17 @@ def get_market():
     for s, d in market_data.items():
         if d["price"] <= 0:
             continue
+        if s not in candle_data:
+            continue
         item = {"symbol": s, **d}
-        cd = candle_data.get(s)
-        if cd:
-            sig = get_ema_signal(s, d["price"])
-            item["ema"] = {
-                "trend":    sig["trend_ok"],
-                "pullback": sig["pullback_ok"],
-                "volume":   sig["vol_ok"],
-                "stop":     sig["stop_ok"],
-                "signal":   sig["signal"],
-            }
-        else:
-            item["ema"] = None
+        sig = get_ema_signal(s, d["price"])
+        item["ema"] = {
+            "trend":    sig["trend_ok"],
+            "pullback": sig["pullback_ok"],
+            "volume":   sig["vol_ok"],
+            "stop":     sig["stop_ok"],
+            "signal":   sig["signal"],
+        }
         items.append(item)
     result = sorted(items, key=lambda x: x["change24h"], reverse=True)
     return {"market": result}

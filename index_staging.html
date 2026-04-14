@@ -2,21 +2,35 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CryptoAgent</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Zentra</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="CryptoAgent">
-<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;CryptoAgent&quot;,&quot;short_name&quot;:&quot;CryptoAgent&quot;,&quot;start_url&quot;:&quot;/&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%230a0b0d&quot;,&quot;theme_color&quot;:&quot;%230a0b0d&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;https://assets.coingecko.com/coins/images/1/small/bitcoin.png&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/png&quot;}]}">
+<meta name="apple-mobile-web-app-title" content="Zentra">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%230052ff'/><polyline points='24,130 60,95 88,115 120,65 156,80' fill='none' stroke='white' stroke-width='12' stroke-linecap='round' stroke-linejoin='round'/><circle cx='156' cy='80' r='10' fill='white'/></svg>">
+<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Zentra&quot;,&quot;short_name&quot;:&quot;Zentra&quot;,&quot;start_url&quot;:&quot;/&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%23ffffff&quot;,&quot;theme_color&quot;:&quot;%230052ff&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%230052ff'/%3E%3Cpolyline points='24,130 60,95 88,115 120,65 156,80' fill='none' stroke='white' stroke-width='12' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='156' cy='80' r='10' fill='white'/%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+// Applica tema prima del rendering per evitare flash
+(function(){
+  const t = localStorage.getItem('theme');
+  if(t === 'dark'){
+    document.documentElement.setAttribute('data-theme','dark');
+    document.documentElement.style.background='#0a0b0d';
+  } else {
+    // default: light
+    document.documentElement.style.background='#ffffff';
+  }
+})();
+</script>
 <style>
 :root {
-  --bg: #0a0b0d;
-  --surface: #141519;
-  --surface2: #1c1e24;
-  --surface3: #23262f;
-  --border: #2a2d38;
-  --border2: #353844;
+  --bg: #ffffff;
+  --surface: #f7f8fa;
+  --surface2: #f0f2f5;
+  --surface3: #e8eaef;
+  --border: #ebebeb;
+  --border2: #d0d4e0;
   --blue: #0052ff;
   --blue-dim: rgba(0,82,255,0.15);
   --blue-glow: rgba(0,82,255,0.3);
@@ -25,9 +39,9 @@
   --red: #f6465d;
   --red-dim: rgba(246,70,93,0.12);
   --yellow: #f0b90b;
-  --text: #ffffff;
-  --text2: #8a8fa8;
-  --text3: #5a5f74;
+  --text: #0a0b0d;
+  --text2: #5a6480;
+  --text3: #9aa0b2;
   --mono: 'SF Mono', 'Fira Code', monospace;
   --sans: 'Inter', -apple-system, sans-serif;
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -38,7 +52,10 @@
   --radius-sm: 10px;
 }
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body { background:var(--bg); color:var(--text); font-family:var(--sans); height:100dvh; overflow:hidden; -webkit-font-smoothing:antialiased; }
+body { background:var(--bg); color:var(--text); font-family:var(--sans); height:100dvh; overflow:hidden; overflow-x:hidden; -webkit-font-smoothing:antialiased; }
+html { overflow-x:hidden; }
+.pages { visibility:hidden; }
+.pages.ready { visibility:visible; }
 ::-webkit-scrollbar { width:0; }
 
 .hdr { position:fixed; top:0; left:0; right:0; height:calc(var(--hdr-h) + var(--safe-t)); padding-top:var(--safe-t); background:var(--bg); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding-left:20px; padding-right:16px; z-index:100; }
@@ -72,7 +89,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); height:
 .toggle-switch.on::after { transform:translateX(18px); }
 
 /* Modal conferma custom */
-.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:400; display:flex; align-items:flex-end; justify-content:center; padding-bottom:calc(var(--safe-b) + 16px); opacity:0; pointer-events:none; transition:opacity 0.2s; }
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:400; display:flex; align-items:center; justify-content:center; padding:24px; opacity:0; pointer-events:none; transition:opacity 0.2s; }
 .modal-overlay.open { opacity:1; pointer-events:all; }
 .modal-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:24px; width:100%; max-width:420px; transform:translateY(20px); transition:transform 0.2s; }
 .modal-overlay.open .modal-card { transform:translateY(0); }
@@ -85,7 +102,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); height:
 .modal-btn:active { transform:scale(0.97); }
 
 /* Notifica tab storico */
-.tab-badge { position:absolute; top:6px; right:50%; transform:translateX(8px); background:var(--red); color:#fff; font-size:9px; font-weight:700; border-radius:10px; padding:1px 5px; min-width:16px; text-align:center; line-height:14px; }
+.tab-badge { position:absolute; top:-2px; right:-2px; width:7px; height:7px; background:var(--red); border-radius:50%; box-shadow:0 0 0 2px var(--bg); }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
 .tabbar { position:fixed; bottom:0; left:0; right:0; height:calc(var(--tab-h) + var(--safe-b)); padding-bottom:var(--safe-b); background:var(--bg); border-top:1px solid var(--border); display:flex; z-index:100; }
@@ -215,7 +232,16 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 .ema-dot.signal { background:var(--blue); box-shadow:0 0 8px var(--blue-glow); animation:pulse 1s infinite; }
 .ema-dot-label { font-size:9px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.03em; }
 
-.filter-row { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+/* EMA tooltip */
+.ema-tooltip { position:fixed; background:var(--surface); border:1px solid var(--border2); border-radius:10px; padding:10px 12px; z-index:500; max-width:240px; box-shadow:0 8px 24px rgba(0,0,0,0.4); pointer-events:none; opacity:0; transition:opacity 0.15s; }
+.ema-tooltip.show { opacity:1; }
+.ema-tooltip-row { display:flex; align-items:center; gap:8px; padding:4px 0; font-size:12px; font-weight:600; color:var(--text2); }
+.ema-tooltip-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.ema-tooltip-dot.on { background:var(--green); }
+.ema-tooltip-dot.off { background:var(--text3); opacity:0.5; }
+
+.filter-row { display:flex; gap:6px; margin-bottom:12px; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+.filter-row::-webkit-scrollbar { display:none; }
 .filter-btn { font-size:12px; font-weight:600; padding:6px 12px; border-radius:20px; border:1.5px solid var(--border); background:var(--surface2); color:var(--text3); cursor:pointer; font-family:var(--sans); transition:all 0.15s; }
 .filter-btn.active { border-color:var(--blue); color:var(--blue); background:var(--blue-dim); }
 .filter-btn.gain { color:var(--green); }
@@ -243,10 +269,32 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 .auth-logo-dot { width:12px; height:12px; border-radius:50%; background:var(--blue); box-shadow:0 0 16px var(--blue-glow); display:inline-block; margin-right:8px; }
 
 .empty { text-align:center; padding:48px 20px; color:var(--text3); }
+
+/* Dropdown filtri custom */
+.fdd { position:relative; display:inline-block; }
+.fdd-btn { display:flex; align-items:center; gap:6px; padding:6px 12px; background:var(--surface2); border:1.5px solid var(--border); border-radius:20px; font-size:12px; font-weight:600; color:var(--text2); cursor:pointer; font-family:var(--sans); transition:all 0.15s; white-space:nowrap; user-select:none; }
+.fdd-btn.active { border-color:var(--blue); color:var(--blue); background:var(--blue-dim); }
+.fdd-btn svg { flex-shrink:0; transition:transform 0.15s; }
+.fdd-btn.open svg { transform:rotate(180deg); }
+.fdd-menu { position:fixed; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:4px; z-index:500; min-width:140px; box-shadow:0 8px 24px rgba(0,0,0,0.12); display:none; }
+.fdd-menu.open { display:block; }
+.fdd-item { padding:9px 12px; font-size:13px; font-weight:600; color:var(--text2); border-radius:8px; cursor:pointer; transition:background 0.1s; white-space:nowrap; }
+.fdd-item:hover, .fdd-item:active { background:var(--surface2); }
+.fdd-item.selected { color:var(--blue); }
+
+/* Mini-log agente nel monitor */
+.agent-msg { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
+.agent-msg:last-child { border-bottom:none; }
+.agent-msg-dot { width:6px; height:6px; border-radius:50%; margin-top:5px; flex-shrink:0; }
+.agent-msg-dot.buy { background:var(--green); }
+.agent-msg-dot.sell { background:var(--red); }
+.agent-msg-dot.info { background:var(--text3); }
+.agent-msg-text { font-size:12px; color:var(--text2); flex:1; line-height:1.5; font-weight:500; }
+.agent-msg-time { font-size:10px; color:var(--text3); flex-shrink:0; font-variant-numeric:tabular-nums; margin-top:1px; }
 .empty-icon { font-size:36px; margin-bottom:10px; opacity:0.5; }
 .empty-text { font-size:14px; font-weight:500; }
 
-[data-theme="light"] { --bg:#ffffff; --surface:#f7f8fa; --surface2:#f0f2f5; --surface3:#e8eaef; --border:#ebebeb; --border2:#d0d4e0; --text:#0a0b0d; --text2:#5a6480; --text3:#9aa0b2; }
+[data-theme="dark"] { --bg:#0a0b0d; --surface:#141519; --surface2:#1c1e24; --surface3:#23262f; --border:#2a2d38; --border2:#353844; --text:#ffffff; --text2:#8a8fa8; --text3:#5a5f74; }
 </style>
 </head>
 <body>
@@ -254,7 +302,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 <!-- AUTH SCREEN -->
 <div id="authScreen">
   <div class="auth-card" id="loginCard">
-    <div class="auth-logo"><span class="auth-logo-dot"></span><span style="font-size:20px;font-weight:700">CryptoAgent</span></div>
+    <div class="auth-logo"><span class="auth-logo-dot"></span><span style="font-size:20px;font-weight:700">Zentra</span></div>
     <div class="auth-title">Bentornato</div>
     <div class="auth-sub">Accedi al tuo account</div>
     <div class="auth-field">
@@ -266,7 +314,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
       <label>Password</label>
       <div class="auth-field-wrap">
         <input type="password" id="loginPass" placeholder="la tua password" autocomplete="current-password">
-        <span class="auth-eye" onclick="togglePwd('loginPass',this)">&#128065;</span>
+        <span class="auth-eye" onclick="togglePwd('loginPass',this)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
       </div>
       <div class="auth-field-error" id="loginPassErr"></div>
     </div>
@@ -274,7 +322,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <div class="auth-switch">Non hai un account? <a onclick="showRegister()">Registrati</a></div>
   </div>
   <div class="auth-card" id="registerCard" style="display:none">
-    <div class="auth-logo"><span class="auth-logo-dot"></span><span style="font-size:20px;font-weight:700">CryptoAgent</span></div>
+    <div class="auth-logo"><span class="auth-logo-dot"></span><span style="font-size:20px;font-weight:700">Zentra</span></div>
     <div class="auth-title">Crea account</div>
     <div class="auth-sub">Inizia a tradare con il tuo agente AI</div>
     <div class="auth-field">
@@ -286,7 +334,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
       <label>Password</label>
       <div class="auth-field-wrap">
         <input type="password" id="regPass" placeholder="minimo 6 caratteri">
-        <span class="auth-eye" onclick="togglePwd('regPass',this)">&#128065;</span>
+        <span class="auth-eye" onclick="togglePwd('regPass',this)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
       </div>
       <div class="auth-field-error" id="regPassErr"></div>
     </div>
@@ -294,7 +342,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <div class="auth-switch">Hai gia un account? <a onclick="showLogin()">Accedi</a></div>
   </div>
   <div class="auth-card" id="apiKeysCard" style="display:none">
-    <div class="auth-logo"><span class="auth-logo-dot"></span><span style="font-size:20px;font-weight:700">CryptoAgent</span></div>
+    <div class="auth-logo"><span class="auth-logo-dot"></span><span style="font-size:20px;font-weight:700">Zentra</span></div>
     <div class="auth-title">Collega Coinbase</div>
     <div class="auth-sub">Inserisci le tue API key di Coinbase Advanced per abilitare il trading reale</div>
     <div class="auth-error" id="keysError"></div>
@@ -314,7 +362,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 <div class="hdr">
   <div class="hdr-logo">
     <div class="hdr-logo-dot inactive" id="logoDot"></div>
-    CryptoAgent
+    Zentra
   </div>
   <div class="hdr-right">
     <div class="avatar-btn" id="avatarBtn" onclick="toggleProfileMenu()">
@@ -327,7 +375,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 <div class="profile-menu" id="profileMenu">
   <div class="profile-menu-header">
     <div class="profile-menu-user" id="pmUsername">--</div>
-    <div class="profile-menu-sub" id="pmMode">Simulazione</div>
+    <div class="profile-menu-sub" id="pmMode" style="display:none"></div>
   </div>
   <div class="profile-menu-item" onclick="openApiKeysFromMenu()">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
@@ -362,13 +410,42 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
   </div>
 </div>
 
+<!-- Modal chiudi posizione -->
+<div class="modal-overlay" id="closeModal">
+  <div class="modal-card">
+    <div class="modal-title">Chiudi posizione</div>
+    <div class="modal-body">Vuoi chiudere manualmente la posizione su <strong id="closeModalSymbol"></strong>? L'ordine verrà eseguito al prezzo di mercato corrente.</div>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="hideCloseModal()">Annulla</button>
+      <button class="modal-btn confirm-real" style="background:var(--red)" onclick="confirmClosePosition()">Chiudi</button>
+    </div>
+  </div>
+</div>
+<input type="hidden" id="closeModalPending" value="">
+
 <!-- Input nascosto per foto profilo -->
 <input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="handleAvatarChange(event)">
+
+<!-- Tooltip EMA -->
+<div class="ema-tooltip" id="emaTooltip"></div>
 
 <div class="pages">
 
   <!-- CONFIG -->
   <div class="page active" id="page-config">
+
+    <div class="mode-container" style="margin:0 0 16px">
+      <div class="mode-label">Modalità</div>
+      <div class="mode-row">
+        <button class="mode-btn" id="modeSimBtn" onclick="setMode(false)">
+          Simulazione
+        </button>
+        <button class="mode-btn" id="modeRealBtn" onclick="setMode(true)">
+          Reale
+        </button>
+      </div>
+      <div class="mode-hint" id="modeHint">Seleziona la modalita per iniziare</div>
+    </div>
 
     <div class="section-label">Capitale</div>
     <div class="field">
@@ -478,19 +555,6 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
         oninput="document.getElementById('cdVal').textContent=this.value+'h'">
     </div>
 
-    <div class="mode-container">
-      <div class="mode-label">Modalita</div>
-      <div class="mode-row">
-        <button class="mode-btn active-sim" id="modeSimBtn" onclick="setMode(false)">
-          <span style="font-size:16px">&#9898;</span> Simulazione
-        </button>
-        <button class="mode-btn" id="modeRealBtn" onclick="setMode(true)">
-          <span style="font-size:16px">&#128308;</span> Reale
-        </button>
-      </div>
-      <div class="mode-hint" id="modeHint">Nessun ordine reale verra eseguito</div>
-    </div>
-
     <button class="start-btn" id="startBtn" onclick="startAgent()">Avvia sessione</button>
     <button class="reset-btn" id="resetBtn" onclick="resetAgent()">Reset</button>
     <div style="height:8px"></div>
@@ -527,9 +591,17 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
         <div class="kpi-sub" id="kpiWR">Win rate: --</div>
       </div>
     </div>
+    <!-- Mini-log agente -->
+    <div id="agentActivityWrap" style="display:none;margin-bottom:12px">
+      <div class="card" style="padding:14px 16px">
+        <div class="card-label" style="margin-bottom:10px">Attivita agente</div>
+        <div id="agentActivityList"></div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-label" id="posTitle">Posizioni aperte</div>
-      <div id="positionsWrap"><div class="empty"><div class="empty-icon">&#128228;</div><div class="empty-text">Nessuna posizione aperta</div></div></div>
+      <div id="positionsWrap"><div class="empty"><div class="empty-text">Nessuna posizione aperta</div></div></div>
     </div>
     <div class="card">
       <div class="card-label">P&amp;L nel tempo</div>
@@ -540,45 +612,90 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
   <!-- MERCATO -->
   <div class="page" id="page-market">
     <div class="card" style="padding-bottom:8px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div class="card-label" style="margin:0">Mercato</div>
-        <div style="font-size:11px;font-weight:600;color:var(--text3)" id="universeCount"></div>
-      </div>
       <div style="position:relative;margin-bottom:12px">
         <input type="text" id="mktSearch" placeholder="Cerca coin..." oninput="renderMarket()"
           style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px 11px 36px;color:var(--text);font-size:14px;font-family:var(--sans);outline:none"
           onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
-        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px">&#128269;</span>
+        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
       </div>
-      <div class="filter-row" id="sortRow">
-        <button class="filter-btn active" onclick="setMktSort('change24h',this)">24h %</button>
-        <button class="filter-btn" onclick="setMktSort('change1h',this)">1h %</button>
-        <button class="filter-btn" onclick="setMktSort('volume24h',this)">Volume</button>
-        <button class="filter-btn" onclick="setMktSort('price',this)">Prezzo</button>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <div class="fdd" id="fddMktVar">
+          <div class="fdd-btn active" onclick="toggleFdd('fddMktVar')" id="fddMktVarBtn">24h % <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+          <div class="fdd-menu" id="fddMktVarMenu">
+            <div class="fdd-item selected" onclick="selectFddMkt('fddMktVar','change24h','24h %','var')">24h %</div>
+            <div class="fdd-item" onclick="selectFddMkt('fddMktVar','change1h','1h %','var')">1h %</div>
+          </div>
+        </div>
+        <div class="fdd" id="fddMktMetric">
+          <div class="fdd-btn" onclick="toggleFdd('fddMktMetric')" id="fddMktMetricBtn">Volume <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+          <div class="fdd-menu" id="fddMktMetricMenu">
+            <div class="fdd-item selected" onclick="selectFddMkt('fddMktMetric','volume24h','Volume','metric')">Volume</div>
+            <div class="fdd-item" onclick="selectFddMkt('fddMktMetric','price','Prezzo','metric')">Prezzo</div>
+          </div>
+        </div>
+        <div class="fdd" id="fddMktDir">
+          <div class="fdd-btn" onclick="toggleFdd('fddMktDir')" id="fddMktDirBtn">Tutti <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+          <div class="fdd-menu" id="fddMktDirMenu">
+            <div class="fdd-item selected" onclick="selectFddMkt('fddMktDir','all','Tutti','dir')">Tutti</div>
+            <div class="fdd-item" onclick="selectFddMkt('fddMktDir','gainers','Rialzo','dir')">Rialzo</div>
+            <div class="fdd-item" onclick="selectFddMkt('fddMktDir','losers','Ribasso','dir')">Ribasso</div>
+          </div>
+        </div>
       </div>
-      <div class="filter-row" id="filterRow">
-        <button class="filter-btn active" onclick="setMktFilter('all',this)">Tutti</button>
-        <button class="filter-btn gain" onclick="setMktFilter('gainers',this)">Gainers</button>
-        <button class="filter-btn loss" onclick="setMktFilter('losers',this)">Losers</button>
-      </div>
-      <div id="marketList"><div class="empty"><div class="empty-icon">&#128225;</div><div class="empty-text">Caricamento...</div></div></div>
+      <div id="marketList"><div class="empty"><div class="empty-text">Caricamento...</div></div></div>
     </div>
   </div>
 
-  <!-- LOG -->
-  <div class="page" id="page-log">
-    <div class="card">
-      <div class="card-label">Log attivita</div>
-      <div id="logList"><div class="empty"><div class="empty-icon">&#128203;</div><div class="empty-text">Nessuna attivita</div></div></div>
-    </div>
-  </div>
+  <!-- TRANSAZIONI -->
+  <div class="page" id="page-transazioni">
 
-  <!-- STORICO -->
-  <div class="page" id="page-storico">
-    <div class="card">
-      <div class="card-label">Storico Trade</div>
-      <div id="storicoList"><div class="empty"><div class="empty-icon">&#128202;</div><div class="empty-text">Nessun trade ancora</div></div></div>
+    <!-- Filtri dropdown custom -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="fdd" id="fddPeriod">
+        <div class="fdd-btn" onclick="toggleFdd('fddPeriod')" id="fddPeriodBtn">Oggi <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div class="fdd-menu" id="fddPeriodMenu">
+          <div class="fdd-item selected" onclick="selectFdd('fddPeriod','today','Oggi','period')">Oggi</div>
+          <div class="fdd-item" onclick="selectFdd('fddPeriod','week','7 giorni','period')">7 giorni</div>
+          <div class="fdd-item" onclick="selectFdd('fddPeriod','month','30 giorni','period')">30 giorni</div>
+          <div class="fdd-item" onclick="selectFdd('fddPeriod','6m','6 mesi','period')">6 mesi</div>
+          <div class="fdd-item" onclick="selectFdd('fddPeriod','all','Sempre','period')">Sempre</div>
+        </div>
+      </div>
+      <div class="fdd" id="fddOutcome">
+        <div class="fdd-btn" onclick="toggleFdd('fddOutcome')" id="fddOutcomeBtn">Esito <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div class="fdd-menu" id="fddOutcomeMenu">
+          <div class="fdd-item selected" onclick="selectFdd('fddOutcome','all','Esito','outcome')">Tutti</div>
+          <div class="fdd-item" onclick="selectFdd('fddOutcome','win','Profitto','outcome')">Profitto</div>
+          <div class="fdd-item" onclick="selectFdd('fddOutcome','loss','Perdita','outcome')">Perdita</div>
+        </div>
+      </div>
+      <div class="fdd" id="fddReason">
+        <div class="fdd-btn" onclick="toggleFdd('fddReason')" id="fddReasonBtn">Motivazione <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div class="fdd-menu" id="fddReasonMenu">
+          <div class="fdd-item selected" onclick="selectFdd('fddReason','all','Motivazione','reason')">Tutte</div>
+          <div class="fdd-item" onclick="selectFdd('fddReason','sl','Stop Loss','reason')">Stop Loss</div>
+          <div class="fdd-item" onclick="selectFdd('fddReason','tp1','Take Profit','reason')">Take Profit</div>
+          <div class="fdd-item" onclick="selectFdd('fddReason','manual','Manuale','reason')">Manuale</div>
+        </div>
+      </div>
     </div>
+
+    <!-- Stats -->
+    <div class="kpi-grid" style="margin-bottom:12px">
+      <div class="kpi">
+        <div class="kpi-label">Trade</div>
+        <div class="kpi-value" id="txCount">0</div>
+        <div class="kpi-sub" id="txPnl">P&L: --</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Win Rate</div>
+        <div class="kpi-value" id="txWinRate">--%</div>
+        <div class="kpi-sub" id="txWinLoss">-- vittorie · -- sconfitte</div>
+      </div>
+    </div>
+
+    <!-- Lista -->
+    <div id="transazioniList"><div class="empty"><div class="empty-text">Nessuna transazione</div></div></div>
   </div>
 
 </div>
@@ -596,16 +713,13 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
     <span>Mercato</span>
   </button>
-  <button class="tab" onclick="showTab('log',this)">
-    <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg></span>
-    <span>Log</span>
-  </button>
-  <button class="tab" onclick="showTab('storico',this)" id="tabStorico">
+
+  <button class="tab" onclick="showTab('transazioni',this)" id="tabTransazioni">
     <span class="tab-icon" style="position:relative">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      <span class="tab-badge" id="storicoBadge" style="display:none">0</span>
+      <span class="tab-badge" id="storicoBadge" style="display:none"></span>
     </span>
-    <span>Storico</span>
+    <span>Transazioni</span>
   </button>
 </div>
 
@@ -672,7 +786,7 @@ function applyAvatar(src) {
 }
 function updateProfileMenu() {
   document.getElementById('pmUsername').textContent = _username || '--';
-  document.getElementById('pmMode').textContent = (window._realMode ? 'Modalità Reale 🔴' : 'Simulazione 🔵');
+  // pmMode rimosso
 }
 
 // ── MODAL CONFERMA ────────────────────────────────────────────────────────────
@@ -696,8 +810,15 @@ async function confirmRealStart() {
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 function togglePwd(inputId, eye) {
   const inp = document.getElementById(inputId);
-  if (inp.type === 'password') { inp.type = 'text'; eye.style.color = 'var(--blue)'; }
-  else { inp.type = 'password'; eye.style.color = ''; }
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    eye.style.color = 'var(--blue)';
+    eye.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+  } else {
+    inp.type = 'password';
+    eye.style.color = '';
+    eye.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+  }
 }
 function showFieldError(inputId, errId, msg) {
   const inp = document.getElementById(inputId);
@@ -808,10 +929,10 @@ function initApp() {
   const savedAvatar = localStorage.getItem('ca_avatar');
   applyAvatar(savedAvatar);
   updateProfileMenu();
-  // Tema
+  // Tema - default light, dark solo se esplicitamente salvato
   const t = localStorage.getItem('theme');
-  if (t === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
+  if (t === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
     document.getElementById('themeToggle').classList.add('on');
   }
   startupSession();
@@ -820,10 +941,16 @@ function initApp() {
 // ── TEMA ──────────────────────────────────────────────────────────────────────
 function toggleTheme() {
   const html = document.documentElement;
-  const light = html.getAttribute('data-theme') !== 'light';
-  html.setAttribute('data-theme', light ? 'light' : '');
-  document.getElementById('themeToggle').classList.toggle('on', light);
-  localStorage.setItem('theme', light ? 'light' : 'dark');
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  if (isDark) {
+    html.setAttribute('data-theme', '');
+    document.getElementById('themeToggle').classList.remove('on');
+    localStorage.setItem('theme', 'light');
+  } else {
+    html.setAttribute('data-theme', 'dark');
+    document.getElementById('themeToggle').classList.add('on');
+    localStorage.setItem('theme', 'dark');
+  }
 }
 
 // ── EMA FILTER ────────────────────────────────────────────────────────────────
@@ -897,6 +1024,54 @@ const LOGO_URLS = {
   WLD:'https://assets.coingecko.com/coins/images/31069/small/worldcoin.jpeg',
   ICP:'https://assets.coingecko.com/coins/images/14495/small/Internet_Computer_logo.png',
   RENDER:'https://assets.coingecko.com/coins/images/11636/small/rndr.png',
+  VET:'https://assets.coingecko.com/coins/images/1167/small/VET_Token_Icon.png',
+  FIL:'https://assets.coingecko.com/coins/images/12817/small/filecoin.png',
+  ALGO:'https://assets.coingecko.com/coins/images/4380/small/download.png',
+  ETC:'https://assets.coingecko.com/coins/images/453/small/ethereum-classic-logo.png',
+  MKR:'https://assets.coingecko.com/coins/images/1364/small/Mark_Maker.png',
+  SNX:'https://assets.coingecko.com/coins/images/3406/small/SNX.png',
+  CRV:'https://assets.coingecko.com/coins/images/12124/small/Curve.png',
+  LDO:'https://assets.coingecko.com/coins/images/13573/small/Lido_DAO.png',
+  RUNE:'https://assets.coingecko.com/coins/images/6595/small/Rune200x200.png',
+  FTM:'https://assets.coingecko.com/coins/images/4001/small/Fantom_round.png',
+  ENJ:'https://assets.coingecko.com/coins/images/1102/small/enjin-coin-logo.png',
+  ENA:'https://assets.coingecko.com/coins/images/36530/small/ethena.png',
+  FET:'https://assets.coingecko.com/coins/images/5681/small/Fetch.jpg',
+  FLOKI:'https://assets.coingecko.com/coins/images/16746/small/PNG_image.png',
+  BONK:'https://assets.coingecko.com/coins/images/28600/small/bonk.jpg',
+  WIF:'https://assets.coingecko.com/coins/images/33566/small/wif.png',
+  JUP:'https://assets.coingecko.com/coins/images/34188/small/jup.png',
+  PYTH:'https://assets.coingecko.com/coins/images/31924/small/pyth.png',
+  SEI:'https://assets.coingecko.com/coins/images/28205/small/Sei_Logo_-_Transparent.png',
+  TAO:'https://assets.coingecko.com/coins/images/28452/small/ARUsPeNQ_400x400.jpeg',
+  XLM:'https://assets.coingecko.com/coins/images/100/small/Stellar_symbol_black_RGB.png',
+  DOT:'https://assets.coingecko.com/coins/images/12171/small/polkadot.png',
+  LINK:'https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png',
+  MATIC:'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
+  UNI:'https://assets.coingecko.com/coins/images/12504/small/uniswap-uni.png',
+  NEAR:'https://assets.coingecko.com/coins/images/10365/small/near_icon.png',
+  INJ:'https://assets.coingecko.com/coins/images/12882/small/Secondary_Symbol.png',
+  APT:'https://assets.coingecko.com/coins/images/26455/small/aptos_round.png',
+  ARB:'https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg',
+  OP:'https://assets.coingecko.com/coins/images/25244/small/Optimism.png',
+  ATOM:'https://assets.coingecko.com/coins/images/1481/small/cosmos_hub.png',
+  TRX:'https://assets.coingecko.com/coins/images/1094/small/tron-logo.png',
+  HBAR:'https://assets.coingecko.com/coins/images/3688/small/hbar.png',
+  AAVE:'https://assets.coingecko.com/coins/images/12645/small/AAVE.png',
+  GRT:'https://assets.coingecko.com/coins/images/13397/small/Graph_Token.png',
+  ZAMA:'https://assets.coingecko.com/coins/images/37479/small/zama.png',
+  PENGU:'https://assets.coingecko.com/coins/images/36158/small/pengu.png',
+  CAKE:'https://assets.coingecko.com/coins/images/12632/small/pancakeswap-cake-logo.png',
+  XPL:'https://assets.coingecko.com/coins/images/38444/small/xpl.png',
+  PLUME:'https://assets.coingecko.com/coins/images/39352/small/plume.jpg',
+  SIGN:'https://assets.coingecko.com/coins/images/37900/small/sign.png',
+  DASH:'https://assets.coingecko.com/coins/images/19/small/dash-logo.png',
+  BARD:'https://assets.coingecko.com/coins/images/38900/small/bard.jpg',
+  TRUMP:'https://assets.coingecko.com/coins/images/39307/small/trump.jpg',
+  ASTER:'https://assets.coingecko.com/coins/images/35276/small/aster.png',
+  PAXG:'https://assets.coingecko.com/coins/images/9519/small/paxg.PNG',
+  ZEC:'https://assets.coingecko.com/coins/images/486/small/circle-zcash-color.png',
+  TREE:'https://assets.coingecko.com/coins/images/39972/small/tree.jpg',
 };
 function getLogo(sym) { return LOGO_URLS[sym] || null; }
 
@@ -911,20 +1086,27 @@ function showTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   el.classList.add('active');
+  localStorage.setItem('ca_active_tab', name);
   if (name === 'market') refreshMarket();
-  if (name === 'storico') {
-    renderStorico();
-    // Azzera notifica
+  if (name === 'transazioni') {
+    renderTransazioni();
     _newTradeCount = 0;
     _lastSeenTradeCount = trades.length;
     updateStoricoBadge();
   }
 }
 
+function restoreActiveTab() {
+  const saved = localStorage.getItem('ca_active_tab') || 'config';
+  const tabs = document.querySelectorAll('.tab');
+  const tabMap = { config: 0, monitor: 1, market: 2, log: 3, storico: 4 };
+  const idx = tabMap[saved] ?? 0;
+  if (tabs[idx]) showTab(saved, tabs[idx]);
+}
+
 function updateStoricoBadge() {
   const badge = document.getElementById('storicoBadge');
   if (_newTradeCount > 0) {
-    badge.textContent = _newTradeCount;
     badge.style.display = '';
   } else {
     badge.style.display = 'none';
@@ -983,8 +1165,8 @@ function resetConfigToDefaults() {
   document.getElementById('cooldown').value = 0; document.getElementById('cdVal').textContent = '0h';
   setEmaFilter(true);
   document.getElementById('modeRealBtn').classList.remove('active-real');
-  document.getElementById('modeSimBtn').classList.add('active-sim');
-  document.getElementById('modeHint').textContent = 'Nessun ordine reale verra eseguito';
+  document.getElementById('modeSimBtn').classList.remove('active-sim');
+  document.getElementById('modeHint').textContent = 'Seleziona la modalita per iniziare';
   document.getElementById('modeHint').style.color = '';
   document.getElementById('totalBalanceDisplay').textContent = 'Modalita simulazione';
   document.getElementById('totalBalanceDisplay').style.color = '';
@@ -1130,6 +1312,7 @@ async function stopAgent() {
   document.getElementById('stopBtn').disabled = true;
   if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
   _sessionEndTs = null;
+  window._lastStatus = null;
   unlockConfig();
 }
 
@@ -1162,7 +1345,7 @@ async function poll() {
     if (newTrades.length > _lastSeenTradeCount) {
       const added = newTrades.length - _lastSeenTradeCount;
       // Solo se non siamo sulla tab storico
-      if (!document.getElementById('page-storico').classList.contains('active')) {
+      if (!document.getElementById('page-transazioni').classList.contains('active')) {
         _newTradeCount += added;
         updateStoricoBadge();
       }
@@ -1185,6 +1368,8 @@ async function poll() {
       document.getElementById('startBtn').disabled = false;
       document.getElementById('stopBtn').disabled = true;
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      // Azzera posizioni per evitare badge IN rimasti
+      if (window._lastStatus) window._lastStatus.positions = [];
       unlockConfig();
     }
     render();
@@ -1205,9 +1390,12 @@ async function startupSession() {
       document.getElementById('startBtn').disabled = true;
       document.getElementById('stopBtn').disabled = false;
       lockConfig();
-      showTab('monitor', document.querySelectorAll('.tab')[1]);
     }
   } catch(e) {}
+  // Ripristina la tab in cui l'utente era prima del refresh
+  restoreActiveTab();
+  // Rimuovi invisibilità ora che la tab corretta è attiva — evita flash di config
+  document.querySelector('.pages').classList.add('ready');
   startPolling();
 }
 
@@ -1217,6 +1405,7 @@ checkAuth();
 function render() {
   const dot = document.getElementById('logoDot');
 
+  const stopBtn = document.getElementById('stopBtn');
   if (S.running) {
     if (window._realMode) {
       dot.className = 'hdr-logo-dot real';
@@ -1224,9 +1413,11 @@ function render() {
       dot.className = 'hdr-logo-dot sim';
     }
     document.getElementById('sessBanner').classList.remove('off');
+    if (stopBtn) { stopBtn.disabled = false; stopBtn.style.display = 'flex'; }
   } else {
     dot.className = 'hdr-logo-dot inactive';
     document.getElementById('sessBanner').classList.add('off');
+    if (stopBtn) { stopBtn.disabled = true; stopBtn.style.display = 'none'; }
   }
 
   // PnL banner
@@ -1235,8 +1426,8 @@ function render() {
   pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
   pnlEl.style.color = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
 
-  // KPI capitale
-  const cap = (S.currentCapital||0) + (S.positions||[]).reduce((a,p)=>a+p.size,0) + pnl;
+  // KPI capitale — il backend restituisce già pnl = total - capital
+  const cap = (S.capital||0) + pnl;
   const capEl = document.getElementById('kpiCapital');
   capEl.textContent = '$' + cap.toFixed(2);
   capEl.className = 'kpi-value' + (pnl > 0 ? ' up' : pnl < 0 ? ' down' : '');
@@ -1249,27 +1440,34 @@ function render() {
   renderPositions();
   drawChart();
 
-  // Log
-  const logList = document.getElementById('logList');
+  // Mini-log agente nel monitor (ultime 4 righe, tono conversazionale)
   const logs = S.log || [];
-  if (!logs.length) {
-    logList.innerHTML = '<div class="empty"><div class="empty-icon">&#128203;</div><div class="empty-text">Nessuna attivita</div></div>';
-  } else {
-    logList.innerHTML = logs.map(l => {
-      // Orario locale dal timestamp stringa
-      const time = l.time || '';
-      return `<div class="log-item"><span class="log-badge ${l.type}">${l.label}</span><span class="log-desc">${l.desc}</span><span class="log-time">${time}</span></div>`;
-    }).join('');
+  const actWrap = document.getElementById('agentActivityWrap');
+  const actList = document.getElementById('agentActivityList');
+  if (actWrap) {
+    if (logs.length > 0 && S.running) {
+      actWrap.style.display = 'block';
+      actList.innerHTML = logs.slice(0, 4).map(l => {
+        const time = l.ts ? new Date(l.ts).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}) : (l.time || '');
+        return `<div class="agent-msg">
+          <div class="agent-msg-dot ${l.type}"></div>
+          <div class="agent-msg-text">${l.desc}</div>
+          <div class="agent-msg-time">${time}</div>
+        </div>`;
+      }).join('');
+    } else {
+      actWrap.style.display = 'none';
+    }
   }
 
-  if (document.getElementById('page-storico').classList.contains('active')) renderStorico();
+  if (document.getElementById('page-transazioni').classList.contains('active')) renderStorico();
 }
 
 function renderPositions() {
   const wrap = document.getElementById('positionsWrap');
   const pos = S.positions || [];
   document.getElementById('posTitle').textContent = 'Posizioni aperte' + (pos.length > 0 ? ' — ' + pos.length : '');
-  if (!pos.length) { wrap.innerHTML = '<div class="empty"><div class="empty-icon">&#128228;</div><div class="empty-text">Nessuna posizione aperta</div></div>'; return; }
+  if (!pos.length) { wrap.innerHTML = '<div class="empty"><div class="empty-text">Nessuna posizione aperta</div></div>'; return; }
   wrap.innerHTML = pos.map(p => {
     const pnl = (p.currentPrice - p.entryPrice) / p.entryPrice * (p.size_remaining || p.size);
     const pct = (p.currentPrice - p.entryPrice) / p.entryPrice * 100;
@@ -1278,7 +1476,8 @@ function renderPositions() {
     const logo = getLogo(p.symbol);
     const img = logo ? `<img src="${logo}" class="pos-logo" onerror="this.style.display='none'">` : `<div class="pos-icon">${p.symbol[0]}</div>`;
     // Orario locale
-    const entryTime = new Date(p.entryTime).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+    const entryTimeStr = p.entryTime ? (p.entryTime.endsWith('Z') ? p.entryTime : p.entryTime + 'Z') : null;
+    const entryTime = entryTimeStr ? new Date(entryTimeStr).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}) : '--:--';
     const tp1Hit = p.tp1_hit || false;
     const tp1Price = p.tp1Price || 0;
     const tp2Price = p.tp2Price || 0;
@@ -1317,27 +1516,114 @@ function renderPositions() {
 }
 
 async function closePosition(symbol) {
-  if (!confirm('Chiudere la posizione su ' + symbol + '?')) return;
+  showCloseModal(symbol);
+}
+
+function showCloseModal(symbol) {
+  document.getElementById('closeModalSymbol').textContent = symbol;
+  document.getElementById('closeModalPending').value = symbol;
+  document.getElementById('closeModal').classList.add('open');
+}
+
+function hideCloseModal() {
+  document.getElementById('closeModal').classList.remove('open');
+}
+
+async function confirmClosePosition() {
+  const symbol = document.getElementById('closeModalPending').value;
+  hideCloseModal();
   await fetch(API + '/close_position/' + symbol, { method:'POST', headers:authHeaders() });
 }
 
-function renderStorico() {
-  const list = document.getElementById('storicoList');
-  if (!trades.length) { list.innerHTML = '<div class="empty"><div class="empty-icon">&#128202;</div><div class="empty-text">Nessun trade ancora</div></div>'; return; }
-  list.innerHTML = [...trades].reverse().map(t => {
+// ── FILTRI TRANSAZIONI ───────────────────────────────────────────────────────
+const txFilters = { period: 'today', outcome: 'all', reason: 'all' };
+
+function setTxDropdown(type, val) {
+  txFilters[type] = val;
+  renderTransazioni();
+}
+
+function setTxFilter(type, val, btn) {
+  txFilters[type] = val;
+  renderTransazioni();
+}
+
+function applyTxFilters(list) {
+  const now = Date.now();
+  const periods = { today: 86400000, week: 7*86400000, month: 30*86400000, '6m': 180*86400000 };
+  return list.filter(t => {
+    // Periodo
+    if (txFilters.period !== 'all') {
+      const age = now - new Date(t.time).getTime();
+      if (age > periods[txFilters.period]) return false;
+    }
+    // Esito
+    if (txFilters.outcome === 'win' && t.pnl < 0) return false;
+    if (txFilters.outcome === 'loss' && t.pnl >= 0) return false;
+    // Motivazione
+    if (txFilters.reason !== 'all') {
+      const r = (t.reason || '').toLowerCase();
+      if (txFilters.reason === 'sl' && !r.includes('sl') && !r.includes('stop')) return false;
+      if (txFilters.reason === 'tp1' && !(r.includes('tp1') || r.includes('tp2') || t.tp1_hit)) return false;
+      if (txFilters.reason === 'tp2' && !r.includes('tp2')) return false;
+      if (txFilters.reason === 'manual' && !r.includes('manual')) return false;
+    }
+    return true;
+  });
+}
+
+function renderTransazioni() {
+  const list = document.getElementById('transazioniList');
+  if (!trades.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-text">Nessuna transazione</div></div>';
+    document.getElementById('txCount').textContent = '0';
+    document.getElementById('txWinRate').textContent = '--%';
+    document.getElementById('txPnl').textContent = 'P&L: --';
+    document.getElementById('txWinLoss').textContent = '-- vittorie · -- sconfitte';
+    return;
+  }
+  const filtered = applyTxFilters([...trades].reverse());
+  // Stats
+  const wins = filtered.filter(t => t.pnl >= 0).length;
+  const losses = filtered.filter(t => t.pnl < 0).length;
+  const totalPnl = filtered.reduce((a, t) => a + t.pnl, 0);
+  const wr = filtered.length > 0 ? Math.round(wins / filtered.length * 100) : 0;
+  document.getElementById('txCount').textContent = filtered.length;
+  document.getElementById('txWinRate').textContent = filtered.length > 0 ? wr + '%' : '--%';
+  document.getElementById('txWinRate').style.color = wr >= 50 ? 'var(--green)' : wr > 0 ? 'var(--red)' : '';
+  document.getElementById('txPnl').textContent = 'P&L: ' + (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+  document.getElementById('txPnl').style.color = totalPnl > 0 ? 'var(--green)' : totalPnl < 0 ? 'var(--red)' : '';
+  document.getElementById('txWinLoss').textContent = wins + ' vittorie · ' + losses + ' sconfitte';
+
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-text">Nessuna transazione</div></div>';
+    return;
+  }
+
+  const reasonLabel = r => {
+    const rl = (r||'').toLowerCase();
+    if (rl.includes('tp2') || rl.includes('tp1')) return 'Take Profit';
+    if (rl.includes('sl') || rl.includes('stop')) return 'Stop Loss';
+    if (rl.includes('manual')) return 'Manuale';
+    return r.replace(' SIM','').replace(' REALE','');
+  };
+
+  list.innerHTML = filtered.map(t => {
     const isWin = t.pnl >= 0;
     const color = isWin ? 'var(--green)' : 'var(--red)';
-    // Orario locale
     const dt = new Date(t.time);
     const ds = dt.toLocaleDateString('it-IT', {day:'2-digit', month:'short'}) + ' ' + dt.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
-    const tp1Badge = t.tp1_hit ? '<span style="font-size:9px;background:rgba(5,193,104,0.15);color:var(--green);border-radius:4px;padding:1px 5px;font-weight:700">TP1+TP2</span>' : '';
+    const tp1Badge = t.tp1_hit ? '<span style="font-size:9px;background:rgba(5,193,104,0.15);color:var(--green);border-radius:4px;padding:1px 5px;font-weight:700;margin-left:4px">TP1+TP2</span>' : '';
     return `<div class="trade-row ${isWin?'win':'loss'}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:10px">
           <img src="${getLogo(t.symbol)||''}" style="width:28px;height:28px;border-radius:50%" onerror="this.style.display='none'">
           <div>
-            <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:6px">${t.symbol}${tp1Badge}</div>
-            <div style="font-size:11px;color:var(--text3);font-weight:500">${ds} &middot; ${t.durationMin} min</div>
+            <div style="font-weight:700;font-size:15px;display:flex;align-items:center">${t.symbol}${tp1Badge}</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
+              <span style="font-size:11px;color:var(--text3);font-weight:500">${ds} · ${t.durationMin} min</span>
+              <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;background:var(--surface3);color:var(--text2)">${reasonLabel(t.reason)}</span>
+            </div>
           </div>
         </div>
         <div style="text-align:right">
@@ -1345,18 +1631,14 @@ function renderStorico() {
           <div style="font-size:12px;font-weight:600;color:${color}">${isWin?'+':''}${t.pct.toFixed(2)}%</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <div style="background:var(--surface3);border-radius:8px;padding:8px;text-align:center">
           <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:3px">ENTRATA</div>
-          <div style="font-size:12px;font-weight:600">$${t.entryPrice.toFixed(3)}</div>
+          <div style="font-size:12px;font-weight:600">$${t.entryPrice.toFixed(4)}</div>
         </div>
         <div style="background:var(--surface3);border-radius:8px;padding:8px;text-align:center">
           <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:3px">USCITA</div>
-          <div style="font-size:12px;font-weight:600">$${t.exitPrice.toFixed(3)}</div>
-        </div>
-        <div style="background:var(--surface3);border-radius:8px;padding:8px;text-align:center">
-          <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:3px">MOTIVO</div>
-          <div style="font-size:11px;font-weight:700;color:${color}">${t.reason.replace(' SIM','').replace(' REALE','')}</div>
+          <div style="font-size:12px;font-weight:600">$${t.exitPrice.toFixed(4)}</div>
         </div>
       </div>
     </div>`;
@@ -1404,20 +1686,97 @@ function drawChart() {
 }
 
 // ── MERCATO ───────────────────────────────────────────────────────────────────
-let mktData=[], mktSort='change24h', mktFilter='all';
+let mktData=[], mktSort='volume24h', mktFilter='all';
+const _emaCache = {};
 
-function setMktSort(key, btn) {
-  mktSort = key;
-  // Reset solo i btn di ordinamento (prima riga)
-  document.querySelectorAll('#sortRow .filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+// ── DROPDOWN CUSTOM ───────────────────────────────────────────────────────────
+function toggleFdd(id) {
+  const menu = document.getElementById(id + 'Menu');
+  const btn = document.getElementById(id + 'Btn');
+  const isOpen = menu.classList.contains('open');
+  // Chiudi tutti
+  document.querySelectorAll('.fdd-menu.open').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('.fdd-btn.open').forEach(b => b.classList.remove('open'));
+  if (!isOpen) {
+    menu.classList.add('open');
+    btn.classList.add('open');
+    // Posiziona menu sotto il btn
+    const rect = btn.getBoundingClientRect();
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.left = rect.left + 'px';
+    setTimeout(() => document.addEventListener('click', closeFddOnOutside), 0);
+  }
+}
+
+function closeFddOnOutside(e) {
+  if (!e.target.closest('.fdd')) {
+    document.querySelectorAll('.fdd-menu.open').forEach(m => m.classList.remove('open'));
+    document.querySelectorAll('.fdd-btn.open').forEach(b => b.classList.remove('open'));
+    document.removeEventListener('click', closeFddOnOutside);
+  }
+}
+
+function selectFdd(fddId, val, label, filterType) {
+  // Aggiorna label bottone
+  const btn = document.getElementById(fddId + 'Btn');
+  const chevron = btn.querySelector('svg').outerHTML;
+  btn.innerHTML = label + ' ' + chevron;
+  // Marca selected
+  document.querySelectorAll('#' + fddId + 'Menu .fdd-item').forEach(i => i.classList.remove('selected'));
+  event.target.classList.add('selected');
+  // Chiudi menu
+  document.getElementById(fddId + 'Menu').classList.remove('open');
+  btn.classList.remove('open');
+  document.removeEventListener('click', closeFddOnOutside);
+  // Applica filtro
+  txFilters[filterType] = val;
+  // Evidenzia btn se non default
+  const defaults = { period: 'today', outcome: 'all', reason: 'all' };
+  btn.classList.toggle('active', val !== defaults[filterType]);
+  renderTransazioni();
+}
+
+function selectFddMkt(fddId, val, label, type) {
+  const btn = document.getElementById(fddId + 'Btn');
+  const chevron = btn.querySelector('svg').outerHTML;
+  btn.innerHTML = label + ' ' + chevron;
+  document.querySelectorAll('#' + fddId + 'Menu .fdd-item').forEach(i => i.classList.remove('selected'));
+  event.target.classList.add('selected');
+  document.getElementById(fddId + 'Menu').classList.remove('open');
+  btn.classList.remove('open');
+  document.removeEventListener('click', closeFddOnOutside);
+  if (type === 'var' || type === 'metric') {
+    mktSort = val;
+    // Se metric, resetta var highlight e viceversa
+    const varBtn = document.getElementById('fddMktVarBtn');
+    const metBtn = document.getElementById('fddMktMetricBtn');
+    if (type === 'var') { varBtn.classList.add('active'); metBtn.classList.remove('active'); }
+    else { metBtn.classList.add('active'); varBtn.classList.remove('active'); }
+  } else if (type === 'dir') {
+    mktFilter = val;
+    btn.classList.toggle('active', val !== 'all');
+  }
   renderMarket();
 }
-function setMktFilter(key, btn) {
-  mktFilter = key;
-  // Reset solo i btn di filtro (seconda riga)
-  document.querySelectorAll('#filterRow .filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+
+function setMktSort(key, btn) { mktSort = key; renderMarket(); }
+function setMktFilter(key, btn) { mktFilter = key; renderMarket(); }
+
+function setMktSortDropdown(type, val) {
+  if (type === 'variation') {
+    mktSort = val;
+    // reset metric dropdown
+    const m = document.getElementById('mktSortMetric');
+    if (m) m.value = '';
+  } else if (type === 'metric' && val) {
+    mktSort = val;
+    // reset variation dropdown to show it's overridden
+  }
+  renderMarket();
+}
+
+function setMktFilterDropdown(val) {
+  mktFilter = val;
   renderMarket();
 }
 
@@ -1426,25 +1785,36 @@ function fmtPrice(p) { if(p>=1000) return '$'+p.toLocaleString('en-US',{maximumF
 
 function renderMarket() {
   let data = [...mktData];
-  if (mktFilter==='gainers') data=data.filter(c=>c.change24h>0);
-  if (mktFilter==='losers') data=data.filter(c=>c.change24h<0);
+  // Filtra sul campo correntemente selezionato per il sort
+  const filterField = (mktSort === 'change1h') ? 'change1h' : 'change24h';
+  if (mktFilter==='gainers') data=data.filter(c=>(c[filterField]||0)>0);
+  if (mktFilter==='losers') data=data.filter(c=>(c[filterField]||0)<0);
   const q=(document.getElementById('mktSearch')?.value||'').trim().toUpperCase();
   if (q) data=data.filter(c=>c.symbol.includes(q)||(getCoinName(c.symbol)||'').toUpperCase().includes(q));
   data.sort((a,b)=>b[mktSort]-a[mktSort]);
   const list = document.getElementById('marketList');
-  if (!data.length) { list.innerHTML='<div class="empty"><div class="empty-icon">&#128229;</div><div class="empty-text">Nessuna coin</div></div>'; return; }
+  if (!data.length) { list.innerHTML='<div class="empty"><div class="empty-text">Nessuna coin</div></div>'; return; }
   list.innerHTML = data.map(c => {
     const chg24=c.change24h||0, chg1h=c.change1h||0, vol=c.volume24h||0;
     const c24=chg24>=0?'var(--green)':'var(--red)'; const c1h=chg1h>=0?'var(--green)':'var(--red)';
-    const isOpen=(window._lastStatus?.positions||[]).some(p=>p.symbol===c.symbol);
+    const isOpen = S.running && (S.positions||[]).some(p=>p.symbol===c.symbol);
     const bg24=chg24>=0?'rgba(5,193,104,0.12)':'rgba(246,70,93,0.12)';
     const fullName=getCoinName(c.symbol);
     const ema = c.ema;
     let emaDots = '';
     if (ema) {
-      const dot = (on, label) => `<div class="ema-dot-wrap"><div class="ema-dot ${on?'on':'off'}"></div><span class="ema-dot-label">${label}</span></div>`;
+      const emaId = 'ema_' + c.symbol;
+      _emaCache[emaId] = ema;
+      const dot = (on, key, label) => {
+        return `<div class="ema-dot-wrap" data-emakey="${key}" data-emaid="${emaId}"
+          onmouseenter="showDotTooltip(this)"
+          onmouseleave="hideEmaTooltip()"
+          ontouchstart="showDotTooltip(this);event.stopPropagation()"
+          style="cursor:pointer"
+        ><div class="ema-dot ${on?'on':'off'}"></div><span class="ema-dot-label">${label}</span></div>`;
+      };
       const signalDot = ema.signal ? `<div class="ema-dot-wrap" style="margin-left:2px"><div class="ema-dot signal"></div><span class="ema-dot-label" style="color:var(--blue)">IN</span></div>` : '';
-      emaDots = `<div class="ema-dots">${dot(ema.trend,'trend')}${dot(ema.pullback,'pull')}${dot(ema.volume,'vol')}${dot(ema.stop,'R')}${signalDot}</div>`;
+      emaDots = `<div class="ema-dots">${dot(ema.trend,'trend','trend')}${dot(ema.pullback,'pullback','pull')}${dot(ema.volume,'volume','vol')}${dot(ema.stop,'stop','R')}${signalDot}</div>`;
     }
     return `<div class="mkt-row${isOpen?' mkt-row-open':''}">
       <div class="mkt-row-main">
@@ -1482,10 +1852,84 @@ async function refreshMarket() {
     const r = await fetch(API + '/market');
     const d = await r.json();
     mktData = d.market || [];
-    document.getElementById('universeCount').textContent = mktData.length + ' coin';
+    // universeCount rimosso dall'header
     renderMarket();
   } catch(e) {}
 }
+
+// ── EMA TOOLTIP ───────────────────────────────────────────────────────────────
+let _tooltipTimeout = null;
+
+// Definizioni indicatori per tooltip
+const EMA_DOT_INFO = {
+  trend: {
+    name: 'Trend',
+    descOn:  "EMA20 > EMA50 su 15min — mercato in tendenza rialzista. Filtro principale: senza trend l'agente non entra.",
+    descOff: "EMA20 < EMA50 su 15min — nessuna tendenza rialzista chiara. L'agente aspetta che il trend si formi.",
+  },
+  pullback: {
+    name: 'Pullback',
+    descOn:  "Il prezzo è tornato vicino a EMA20 su 5min (entro la soglia configurata). Momento ottimale: trend attivo e prezzo che ritraccia.",
+    descOff: "Il prezzo è troppo lontano da EMA20 su 5min. O è già salito troppo (FOMO) o è sceso sotto. Attesa del ritracciamento.",
+  },
+  volume: {
+    name: 'Volume',
+    descOn:  "Volume ultima candela 5min superiore alla media 20 candele x moltiplicatore impostato. Conferma partecipazione reale.",
+    descOff: "Volume insufficiente sull'ultima candela 5min. Un rimbalzo su volume basso è spesso falso — serve partecipazione reale.",
+  },
+  stop: {
+    name: 'R (Stop)',
+    descOn:  "Lo stop contestuale (minimo pullback o 1xATR) è dentro la soglia massima configurata. Rischio/rendimento favorevole.",
+    descOff: "Stop richiesto troppo largo rispetto alla soglia impostata. Rischio eccessivo — il trade viene scartato.",
+  },
+};
+
+function showDotTooltip(el) {
+  const key = el.dataset.emakey;
+  const emaId = el.dataset.emaid;
+  const ema = _emaCache[emaId];
+  if (!ema || !key) return;
+  const info = EMA_DOT_INFO[key];
+  if (!info) return;
+  const on = ema[key];
+  const tip = document.getElementById('emaTooltip');
+  const color = on ? 'var(--green)' : 'var(--red)';
+  const icon = on ? '✓' : '✗';
+  tip.innerHTML =
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+      '<div style="width:10px;height:10px;border-radius:50%;background:' + color + ';flex-shrink:0"></div>' +
+      '<div style="font-size:13px;font-weight:700;color:var(--text)">' + info.name + '</div>' +
+      '<div style="font-size:11px;font-weight:700;color:' + color + ';margin-left:auto">' + icon + ' ' + (on ? 'Attivo' : 'Non attivo') + '</div>' +
+    '</div>' +
+    '<div style="font-size:12px;color:var(--text2);line-height:1.5;font-weight:500">' + (on ? info.descOn : info.descOff) + '</div>';
+  const rect = el.getBoundingClientRect();
+  const tipW = 250;
+  let left = rect.left;
+  if (left + tipW > window.innerWidth - 8) left = window.innerWidth - tipW - 8;
+  if (left < 8) left = 8;
+  let top = rect.bottom + 6;
+  tip.style.left = left + 'px';
+  tip.style.top = top + 'px';
+  tip.classList.add('show');
+  if (_tooltipTimeout) clearTimeout(_tooltipTimeout);
+}
+
+function showEmaTooltip(el, ema, sym) {
+  // fallback non usato ma tenuto per compatibilità
+}
+
+function hideEmaTooltip() {
+  if (_tooltipTimeout) clearTimeout(_tooltipTimeout);
+  _tooltipTimeout = setTimeout(() => {
+    document.getElementById('emaTooltip').classList.remove('show');
+  }, 200);
+}
+
+// Chiudi tooltip toccando altrove su mobile
+document.addEventListener('touchstart', e => {
+  const tip = document.getElementById('emaTooltip');
+  if (tip && !tip.contains(e.target)) tip.classList.remove('show');
+}, { passive: true });
 </script>
 </body>
 </html>
