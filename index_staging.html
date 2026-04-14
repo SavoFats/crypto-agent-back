@@ -269,6 +269,16 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 .auth-logo-dot { width:12px; height:12px; border-radius:50%; background:var(--blue); box-shadow:0 0 16px var(--blue-glow); display:inline-block; margin-right:8px; }
 
 .empty { text-align:center; padding:48px 20px; color:var(--text3); }
+
+/* Mini-log agente nel monitor */
+.agent-msg { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
+.agent-msg:last-child { border-bottom:none; }
+.agent-msg-dot { width:6px; height:6px; border-radius:50%; margin-top:5px; flex-shrink:0; }
+.agent-msg-dot.buy { background:var(--green); }
+.agent-msg-dot.sell { background:var(--red); }
+.agent-msg-dot.info { background:var(--text3); }
+.agent-msg-text { font-size:12px; color:var(--text2); flex:1; line-height:1.5; font-weight:500; }
+.agent-msg-time { font-size:10px; color:var(--text3); flex-shrink:0; font-variant-numeric:tabular-nums; margin-top:1px; }
 .empty-icon { font-size:36px; margin-bottom:10px; opacity:0.5; }
 .empty-text { font-size:14px; font-weight:500; }
 
@@ -569,6 +579,11 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
         <div class="kpi-sub" id="kpiWR">Win rate: --</div>
       </div>
     </div>
+    <!-- Mini-log agente -->
+    <div id="agentActivityWrap" style="display:none;margin-bottom:12px">
+      <div id="agentActivityList"></div>
+    </div>
+
     <div class="card">
       <div class="card-label" id="posTitle">Posizioni aperte</div>
       <div id="positionsWrap"><div class="empty"><div class="empty-icon">&#128228;</div><div class="empty-text">Nessuna posizione aperta</div></div></div>
@@ -602,20 +617,45 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     </div>
   </div>
 
-  <!-- LOG -->
-  <div class="page" id="page-log">
-    <div class="card">
-      <div class="card-label">Log attivita</div>
-      <div id="logList"><div class="empty"><div class="empty-icon">&#128203;</div><div class="empty-text">Nessuna attivita</div></div></div>
-    </div>
-  </div>
+  <!-- TRANSAZIONI -->
+  <div class="page" id="page-transazioni">
 
-  <!-- STORICO -->
-  <div class="page" id="page-storico">
-    <div class="card">
-      <div class="card-label">Storico Trade</div>
-      <div id="storicoList"><div class="empty"><div class="empty-icon">&#128202;</div><div class="empty-text">Nessun trade ancora</div></div></div>
+    <!-- Filtri -->
+    <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin-bottom:8px;padding-bottom:2px">
+      <button class="filter-btn active" id="tfPeriod_all" onclick="setTxFilter('period','all',this)">Sempre</button>
+      <button class="filter-btn" id="tfPeriod_today" onclick="setTxFilter('period','today',this)">Oggi</button>
+      <button class="filter-btn" id="tfPeriod_week" onclick="setTxFilter('period','week',this)">7 giorni</button>
+      <button class="filter-btn" id="tfPeriod_month" onclick="setTxFilter('period','month',this)">30 giorni</button>
+      <button class="filter-btn" id="tfPeriod_6m" onclick="setTxFilter('period','6m',this)">6 mesi</button>
     </div>
+    <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin-bottom:12px;padding-bottom:2px">
+      <button class="filter-btn active" id="tfOutcome_all" onclick="setTxFilter('outcome','all',this)">Tutti</button>
+      <button class="filter-btn gain" id="tfOutcome_win" onclick="setTxFilter('outcome','win',this)">Profitto</button>
+      <button class="filter-btn loss" id="tfOutcome_loss" onclick="setTxFilter('outcome','loss',this)">Perdita</button>
+      <div style="width:1px;background:var(--border);margin:0 2px;flex-shrink:0"></div>
+      <button class="filter-btn active" id="tfReason_all" onclick="setTxFilter('reason','all',this)">Tutti</button>
+      <button class="filter-btn" id="tfReason_sl" onclick="setTxFilter('reason','sl',this)">Stop Loss</button>
+      <button class="filter-btn" id="tfReason_tp1" onclick="setTxFilter('reason','tp1',this)">TP1+TP2</button>
+      <button class="filter-btn" id="tfReason_tp2" onclick="setTxFilter('reason','tp2',this)">TP2</button>
+      <button class="filter-btn" id="tfReason_manual" onclick="setTxFilter('reason','manual',this)">Manuale</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="kpi-grid" style="margin-bottom:12px">
+      <div class="kpi">
+        <div class="kpi-label">Trade</div>
+        <div class="kpi-value" id="txCount">0</div>
+        <div class="kpi-sub" id="txPnl">P&L: --</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Win Rate</div>
+        <div class="kpi-value" id="txWinRate">--%</div>
+        <div class="kpi-sub" id="txWinLoss">-- vittorie · -- sconfitte</div>
+      </div>
+    </div>
+
+    <!-- Lista -->
+    <div id="transazioniList"><div class="empty"><div class="empty-icon">&#128202;</div><div class="empty-text">Nessun trade ancora</div></div></div>
   </div>
 
 </div>
@@ -633,16 +673,13 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
     <span>Mercato</span>
   </button>
-  <button class="tab" onclick="showTab('log',this)">
-    <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg></span>
-    <span>Log</span>
-  </button>
-  <button class="tab" onclick="showTab('storico',this)" id="tabStorico">
+
+  <button class="tab" onclick="showTab('transazioni',this)" id="tabTransazioni">
     <span class="tab-icon" style="position:relative">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       <span class="tab-badge" id="storicoBadge" style="display:none"></span>
     </span>
-    <span>Storico</span>
+    <span>Transazioni</span>
   </button>
 </div>
 
@@ -1011,8 +1048,8 @@ function showTab(name, el) {
   el.classList.add('active');
   localStorage.setItem('ca_active_tab', name);
   if (name === 'market') refreshMarket();
-  if (name === 'storico') {
-    renderStorico();
+  if (name === 'transazioni') {
+    renderTransazioni();
     _newTradeCount = 0;
     _lastSeenTradeCount = trades.length;
     updateStoricoBadge();
@@ -1268,7 +1305,7 @@ async function poll() {
     if (newTrades.length > _lastSeenTradeCount) {
       const added = newTrades.length - _lastSeenTradeCount;
       // Solo se non siamo sulla tab storico
-      if (!document.getElementById('page-storico').classList.contains('active')) {
+      if (!document.getElementById('page-transazioni').classList.contains('active')) {
         _newTradeCount += added;
         updateStoricoBadge();
       }
@@ -1363,20 +1400,27 @@ function render() {
   renderPositions();
   drawChart();
 
-  // Log
-  const logList = document.getElementById('logList');
+  // Mini-log agente nel monitor (ultime 4 righe, tono conversazionale)
   const logs = S.log || [];
-  if (!logs.length) {
-    logList.innerHTML = '<div class="empty"><div class="empty-icon">&#128203;</div><div class="empty-text">Nessuna attivita</div></div>';
-  } else {
-    logList.innerHTML = logs.map(l => {
-      // Converti timestamp ms in orario locale
-      const time = l.ts ? new Date(l.ts).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit', second:'2-digit'}) : (l.time || '');
-      return `<div class="log-item"><span class="log-badge ${l.type}">${l.label}</span><span class="log-desc">${l.desc}</span><span class="log-time">${time}</span></div>`;
-    }).join('');
+  const actWrap = document.getElementById('agentActivityWrap');
+  const actList = document.getElementById('agentActivityList');
+  if (actWrap) {
+    if (logs.length > 0 && S.running) {
+      actWrap.style.display = 'block';
+      actList.innerHTML = logs.slice(0, 4).map(l => {
+        const time = l.ts ? new Date(l.ts).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}) : (l.time || '');
+        return `<div class="agent-msg">
+          <div class="agent-msg-dot ${l.type}"></div>
+          <div class="agent-msg-text">${l.desc}</div>
+          <div class="agent-msg-time">${time}</div>
+        </div>`;
+      }).join('');
+    } else {
+      actWrap.style.display = 'none';
+    }
   }
 
-  if (document.getElementById('page-storico').classList.contains('active')) renderStorico();
+  if (document.getElementById('page-transazioni').classList.contains('active')) renderStorico();
 }
 
 function renderPositions() {
@@ -1450,23 +1494,90 @@ async function confirmClosePosition() {
   await fetch(API + '/close_position/' + symbol, { method:'POST', headers:authHeaders() });
 }
 
-function renderStorico() {
-  const list = document.getElementById('storicoList');
-  if (!trades.length) { list.innerHTML = '<div class="empty"><div class="empty-icon">&#128202;</div><div class="empty-text">Nessun trade ancora</div></div>'; return; }
-  list.innerHTML = [...trades].reverse().map(t => {
+// ── FILTRI TRANSAZIONI ───────────────────────────────────────────────────────
+const txFilters = { period: 'all', outcome: 'all', reason: 'all' };
+
+function setTxFilter(type, val, btn) {
+  txFilters[type] = val;
+  // Reset bottoni dello stesso gruppo
+  document.querySelectorAll('[id^="tf' + type.charAt(0).toUpperCase() + type.slice(1) + '_"]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTransazioni();
+}
+
+function applyTxFilters(list) {
+  const now = Date.now();
+  const periods = { today: 86400000, week: 7*86400000, month: 30*86400000, '6m': 180*86400000 };
+  return list.filter(t => {
+    // Periodo
+    if (txFilters.period !== 'all') {
+      const age = now - new Date(t.time).getTime();
+      if (age > periods[txFilters.period]) return false;
+    }
+    // Esito
+    if (txFilters.outcome === 'win' && t.pnl < 0) return false;
+    if (txFilters.outcome === 'loss' && t.pnl >= 0) return false;
+    // Motivazione
+    if (txFilters.reason !== 'all') {
+      const r = (t.reason || '').toLowerCase();
+      if (txFilters.reason === 'sl' && !r.includes('sl') && !r.includes('stop')) return false;
+      if (txFilters.reason === 'tp1' && !(r.includes('tp1') || r.includes('tp2') || t.tp1_hit)) return false;
+      if (txFilters.reason === 'tp2' && !r.includes('tp2')) return false;
+      if (txFilters.reason === 'manual' && !r.includes('manual')) return false;
+    }
+    return true;
+  });
+}
+
+function renderTransazioni() {
+  const list = document.getElementById('transazioniList');
+  if (!trades.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">&#128202;</div><div class="empty-text">Nessun trade ancora</div></div>';
+    document.getElementById('txCount').textContent = '0';
+    document.getElementById('txWinRate').textContent = '--%';
+    document.getElementById('txPnl').textContent = 'P&L: --';
+    document.getElementById('txWinLoss').textContent = '-- vittorie · -- sconfitte';
+    return;
+  }
+  const filtered = applyTxFilters([...trades].reverse());
+  // Stats
+  const wins = filtered.filter(t => t.pnl >= 0).length;
+  const losses = filtered.filter(t => t.pnl < 0).length;
+  const totalPnl = filtered.reduce((a, t) => a + t.pnl, 0);
+  const wr = filtered.length > 0 ? Math.round(wins / filtered.length * 100) : 0;
+  document.getElementById('txCount').textContent = filtered.length;
+  document.getElementById('txWinRate').textContent = filtered.length > 0 ? wr + '%' : '--%';
+  document.getElementById('txWinRate').style.color = wr >= 50 ? 'var(--green)' : wr > 0 ? 'var(--red)' : '';
+  document.getElementById('txPnl').textContent = 'P&L: ' + (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+  document.getElementById('txPnl').style.color = totalPnl > 0 ? 'var(--green)' : totalPnl < 0 ? 'var(--red)' : '';
+  document.getElementById('txWinLoss').textContent = wins + ' vittorie · ' + losses + ' sconfitte';
+
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">&#128229;</div><div class="empty-text">Nessun trade corrisponde ai filtri</div></div>';
+    return;
+  }
+
+  const reasonLabel = r => {
+    const rl = (r||'').toLowerCase();
+    if (rl.includes('tp2') || rl.includes('tp1')) return 'Take Profit';
+    if (rl.includes('sl') || rl.includes('stop')) return 'Stop Loss';
+    if (rl.includes('manual')) return 'Manuale';
+    return r.replace(' SIM','').replace(' REALE','');
+  };
+
+  list.innerHTML = filtered.map(t => {
     const isWin = t.pnl >= 0;
     const color = isWin ? 'var(--green)' : 'var(--red)';
-    // Orario locale
     const dt = new Date(t.time);
     const ds = dt.toLocaleDateString('it-IT', {day:'2-digit', month:'short'}) + ' ' + dt.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
-    const tp1Badge = t.tp1_hit ? '<span style="font-size:9px;background:rgba(5,193,104,0.15);color:var(--green);border-radius:4px;padding:1px 5px;font-weight:700">TP1+TP2</span>' : '';
+    const tp1Badge = t.tp1_hit ? '<span style="font-size:9px;background:rgba(5,193,104,0.15);color:var(--green);border-radius:4px;padding:1px 5px;font-weight:700;margin-left:4px">TP1+TP2</span>' : '';
     return `<div class="trade-row ${isWin?'win':'loss'}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:10px">
           <img src="${getLogo(t.symbol)||''}" style="width:28px;height:28px;border-radius:50%" onerror="this.style.display='none'">
           <div>
-            <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:6px">${t.symbol}${tp1Badge}</div>
-            <div style="font-size:11px;color:var(--text3);font-weight:500">${ds} &middot; ${t.durationMin} min</div>
+            <div style="font-weight:700;font-size:15px;display:flex;align-items:center">${t.symbol}${tp1Badge}</div>
+            <div style="font-size:11px;color:var(--text3);font-weight:500">${ds} · ${t.durationMin} min · ${reasonLabel(t.reason)}</div>
           </div>
         </div>
         <div style="text-align:right">
@@ -1474,18 +1585,14 @@ function renderStorico() {
           <div style="font-size:12px;font-weight:600;color:${color}">${isWin?'+':''}${t.pct.toFixed(2)}%</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <div style="background:var(--surface3);border-radius:8px;padding:8px;text-align:center">
           <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:3px">ENTRATA</div>
-          <div style="font-size:12px;font-weight:600">$${t.entryPrice.toFixed(3)}</div>
+          <div style="font-size:12px;font-weight:600">$${t.entryPrice.toFixed(4)}</div>
         </div>
         <div style="background:var(--surface3);border-radius:8px;padding:8px;text-align:center">
           <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:3px">USCITA</div>
-          <div style="font-size:12px;font-weight:600">$${t.exitPrice.toFixed(3)}</div>
-        </div>
-        <div style="background:var(--surface3);border-radius:8px;padding:8px;text-align:center">
-          <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:3px">MOTIVO</div>
-          <div style="font-size:11px;font-weight:700;color:${color}">${t.reason.replace(' SIM','').replace(' REALE','')}</div>
+          <div style="font-size:12px;font-weight:600">$${t.exitPrice.toFixed(4)}</div>
         </div>
       </div>
     </div>`;
@@ -1560,8 +1667,10 @@ function fmtPrice(p) { if(p>=1000) return '$'+p.toLocaleString('en-US',{maximumF
 
 function renderMarket() {
   let data = [...mktData];
-  if (mktFilter==='gainers') data=data.filter(c=>c.change24h>0);
-  if (mktFilter==='losers') data=data.filter(c=>c.change24h<0);
+  // Filtra sul campo correntemente selezionato per il sort
+  const filterField = (mktSort === 'change1h') ? 'change1h' : 'change24h';
+  if (mktFilter==='gainers') data=data.filter(c=>(c[filterField]||0)>0);
+  if (mktFilter==='losers') data=data.filter(c=>(c[filterField]||0)<0);
   const q=(document.getElementById('mktSearch')?.value||'').trim().toUpperCase();
   if (q) data=data.filter(c=>c.symbol.includes(q)||(getCoinName(c.symbol)||'').toUpperCase().includes(q));
   data.sort((a,b)=>b[mktSort]-a[mktSort]);
