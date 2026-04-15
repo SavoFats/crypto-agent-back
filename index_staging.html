@@ -511,16 +511,19 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
       </div>
     </div>
 
-    <!-- Widget sessione in corso + bottone avvia -->
+    <!-- Avvia sessione -->
+    <div style="display:flex;justify-content:center;margin-bottom:16px">
+      <button id="homeStartBtn" onclick="openDrawer()" style="display:inline-flex;align-items:center;gap:8px;padding:13px 28px;background:var(--blue);border:none;border-radius:var(--radius);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans);box-shadow:0 4px 20px rgba(0,82,255,0.25);transition:all 0.15s;letter-spacing:-0.01em">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Avvia sessione
+      </button>
+    </div>
+    <!-- Widget sessione in corso -->
     <div class="card" id="homeSessionWidget">
-      <div id="homeStartBtnWrap" style="display:flex;justify-content:center;padding:4px 0 4px">
-        <button id="homeStartBtn" onclick="openDrawer()" style="display:inline-flex;align-items:center;gap:8px;padding:13px 28px;background:var(--blue);border:none;border-radius:var(--radius);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans);box-shadow:0 4px 20px rgba(0,82,255,0.25);transition:all 0.15s;letter-spacing:-0.01em">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          Avvia sessione
-        </button>
+      <div class="card-label" style="margin-bottom:10px">Sessione in corso</div>
+      <div id="homeSessionContent">
+        <div class="empty" style="padding:16px 0"><div class="empty-text" style="color:var(--text3)">Nessuna sessione attiva</div></div>
       </div>
-      <div class="card-label" style="margin-bottom:10px;display:none" id="homeSessionLabel">Sessione in corso</div>
-      <div id="homeSessionContent"></div>
     </div>
 
     <div style="height:16px"></div>
@@ -1677,13 +1680,10 @@ function renderHomeSession() {
   const widget = document.getElementById('homeSessionWidget');
   const cnt = document.getElementById('homeSessionContent');
   const startBtn = document.getElementById('homeStartBtn');
-  const startBtnWrap = document.getElementById('homeStartBtnWrap');
-  const sessionLabel = document.getElementById('homeSessionLabel');
   if (!widget || !cnt) return;
-  // Mostra/nasconde bottone avvia e label sessione
-  if (startBtnWrap) startBtnWrap.style.display = S.running ? 'none' : 'flex';
+  // Mostra/nasconde bottone avvia
   if (startBtn) startBtn.style.display = S.running ? 'none' : 'inline-flex';
-  if (sessionLabel) sessionLabel.style.display = S.running ? 'block' : 'none';
+  if (!S.running) { widget.style.display = 'none'; return; }
   widget.style.display = 'block';
   if (!S.running) { cnt.innerHTML = ''; return; }
   const pos = S.positions || [];
