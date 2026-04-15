@@ -1298,15 +1298,12 @@ function getLogo(sym) {
     .then(d => {
       const coin = (d.coins || []).find(c => c.symbol.toUpperCase() === sym);
       if (coin && coin.large) {
-        // Converti URL large → small
         _logoCache[sym] = coin.large.replace('/large/', '/small/');
-        // Aggiorna tutte le img con questo simbolo già nel DOM
-        document.querySelectorAll(`[data-logo-sym="${sym}"]`).forEach(img => {
-          img.src = _logoCache[sym];
-          img.style.display = '';
-          const ph = img.nextElementSibling;
-          if (ph) ph.style.display = 'none';
-        });
+        // Aggiorna img già nel DOM tramite id
+        const img = document.getElementById('logo-img-' + sym);
+        const ph  = document.getElementById('logo-ph-' + sym);
+        if (img) { img.src = _logoCache[sym]; img.style.display = ''; }
+        if (ph)  { ph.style.display = 'none'; }
       }
     })
     .catch(() => {});
@@ -2144,8 +2141,8 @@ function renderMarket() {
       <div class="mkt-row-main">
         <div class="mkt-coin">
           <div class="mkt-logo-wrap">
-            <img src="${getLogo(c.symbol)}" class="mkt-logo" data-logo-sym="${c.symbol}" onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
-            <div class="mkt-icon-placeholder" style="display:none">${c.symbol[0]}</div>
+            <img ${getLogo(c.symbol) ? `src="${getLogo(c.symbol)}"` : ''} class="mkt-logo" data-logo-sym="${c.symbol}" id="logo-img-${c.symbol}" ${!getLogo(c.symbol) ? 'style="display:none"' : ''} onerror="this.onerror=null;this.style.display='none';document.getElementById('logo-ph-${c.symbol}').style.display='flex'">
+            <div class="mkt-icon-placeholder" id="logo-ph-${c.symbol}" style="${getLogo(c.symbol) ? 'display:none' : 'display:flex'}">${c.symbol[0]}</div>
           </div>
           <div>
             <div class="mkt-name" style="display:flex;align-items:center;justify-content:space-between;width:100%">
