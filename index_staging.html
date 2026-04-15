@@ -1422,8 +1422,22 @@ function updateAlloc() {
   const pct = parseInt(document.getElementById('capitalPct').value) || 100;
   const total = parseFloat(document.getElementById('capital').dataset.total || 0);
   const tradable = total > 0 ? (total * pct / 100) : 0;
-  const perTrade = tradable > 0 ? '$' + (tradable * v / 100).toFixed(2) : '--';
-  document.getElementById('allocHint').textContent = 'Max ' + max + ' posizioni · ' + perTrade + ' per trade';
+  const sizePerTrade = tradable * v / 100;
+  const slots = max; // slot massimi contemporanei
+  const feeReserve = sizePerTrade * 0.012 * slots; // 0.6% entrata + 0.6% uscita * n posizioni
+  const netCapital = tradable - feeReserve;
+  const netPerTrade = netCapital * v / 100;
+
+  const hint = document.getElementById('allocHint');
+  if (tradable > 0) {
+    hint.innerHTML =
+      'Max ' + max + ' posizioni · <strong>$' + netPerTrade.toFixed(2) + '</strong> per trade' +
+      '<br><span style="color:var(--text3);font-size:10px">Capitale: $' + tradable.toFixed(2) +
+      ' · Fee stimate: <span style="color:var(--red)">−$' + feeReserve.toFixed(2) + '</span>' +
+      ' · Netto: $' + netCapital.toFixed(2) + '</span>';
+  } else {
+    hint.innerHTML = 'Max ' + max + ' posizioni · configura il capitale per vedere le fee';
+  }
 }
 
 function onCapitalInput() { updateCapitalPct(); } // compat
