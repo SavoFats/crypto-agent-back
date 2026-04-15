@@ -1554,12 +1554,15 @@ function startPolling() {
 
 async function poll() {
   try {
-    const [sRes, tRes] = await Promise.all([
+    const [sRes, tRes, mRes] = await Promise.all([
       fetch(API + '/status', { headers:authHeaders() }),
-      fetch(API + '/trades', { headers:authHeaders() })
+      fetch(API + '/trades', { headers:authHeaders() }),
+      fetch(API + '/market'),
     ]);
     S = await sRes.json(); window._lastStatus = S;
     const td = await tRes.json();
+    const md = await mRes.json();
+    mktData = md.market || [];
     const newTrades = td.trades || [];
 
     // Notifica nuovi trade chiusi
@@ -1699,6 +1702,7 @@ function render() {
   }
 
   if (document.getElementById('page-transazioni').classList.contains('active')) renderStorico();
+  if (document.getElementById('page-home').classList.contains('active')) renderHomeWatchlist();
   renderHomeSession();
 }
 
