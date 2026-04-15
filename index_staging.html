@@ -2340,6 +2340,8 @@ function updateMarketPricesInPlace() {
     }
   }
 }
+
+async function toggleWatchlist(symbol) {
   if (_watchlist.has(symbol)) {
     _watchlist.delete(symbol);
     await fetch(API + '/watchlist/' + symbol, { method: 'DELETE', headers: authHeaders() });
