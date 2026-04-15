@@ -433,10 +433,14 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
     is_real  = cfg.get("realMode", False)
 
     alloc_pct = cfg.get("allocPct", 0.20)
-    # Size = quota del capitale tradabile per questo trade
+    COINBASE_FEE = 0.006  # 0.60% per lato
+    # Size = quota del capitale tradabile netto per questo trade
     size = tradable_capital * alloc_pct
     if size < 1:
         return
+
+    # Fee di entrata (sempre applicata, in reale la detrae Coinbase, in sim la contabilizziamo noi)
+    entry_fee = size * COINBASE_FEE
 
     # Stop price: dalla funzione EMA signal (contestuale ATR/low)
     # Fallback: stop fisso da config
@@ -498,10 +502,11 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
     else:
         actual_price = price
         add_log(state, "buy", "ACQUISTO SIM",
-            f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | "
+            f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | Fee: ${entry_fee:.2f} | "
             f"SL: ${stop_price:.4f} | TP1: ${tp1_price:.4f} | TP2: ${tp2_price:.4f} | R: {R_pct*100:.2f}%")
 
-    state["currentCapital"] -= size
+    # In sim sottraiamo anche la fee di entrata dal capitale disponibile
+    state["currentCapital"] -= size + (entry_fee if not is_real else 0)
     pos = {
         "symbol":      sym,
         "icon":        sym_data["icon"],
@@ -509,14 +514,15 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
         "currentPrice": actual_price,
         "highPrice":   actual_price,
         "size":        size,
-        "size_remaining": size,        # per TP parziale
-        "tp1_hit":     False,          # TP1 già raggiunto?
+        "size_remaining": size,
+        "tp1_hit":     False,
         "entryTime":   datetime.utcnow().isoformat() + "Z",
         "stopPrice":   stop_price,
         "tp1Price":    tp1_price,
         "tp2Price":    tp2_price,
         "R_pct":       R_pct,
         "realMode":    is_real,
+        "fee_pct":     COINBASE_FEE,  # usato in exit per calcolare fee uscita
     }
     state["positions"].append(pos)
 
@@ -564,6 +570,11 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
 
     pnl = (cur - pos["entryPrice"]) / pos["entryPrice"] * close_size
     pct = (cur - pos["entryPrice"]) / pos["entryPrice"] * 100
+
+    # Fee di uscita: 0.60% sul valore liquidato (applicata sempre per riflettere realtà)
+    fee_pct = pos.get("fee_pct", 0.006)
+    exit_fee = close_size * fee_pct
+    pnl -= exit_fee  # riduce il PnL netto
 
     if partial:
         # TP1: restituisce metà capitale, aggiorna size_remaining, sposta stop a breakeven
@@ -623,7 +634,7 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
     state["positions"] = [p for p in state["positions"] if p is not pos]
     mode = "REALE" if pos.get("realMode") else "SIM"
     add_log(state, "sell", f"{reason} {mode}",
-        f"{sym} @ ${cur:.4f} | {pnl:+.2f}$ ({pct:+.2f}%) | {dur:.0f} min")
+        f"{sym} @ ${cur:.4f} | {pnl:+.2f}$ ({pct:+.2f}%) | fee: ${exit_fee:.2f} | {dur:.0f} min")
     if pos.get("realMode"):
         esito = "PROFITTO" if pnl >= 0 else "PERDITA"
         msg = ("VENDITA REALE - " + esito + "\n" + sym + " @ $" + f"{cur:.4f}" +
@@ -688,6 +699,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
 
     alloc_pct   = cfg.get("allocPct", 0.20)
     capital_pct = cfg.get("capitalPct", 1.0)
+    COINBASE_FEE = 0.006  # 0.60% per lato (taker fee)
 
     # Calcola il capitale tradabile dinamicamente
     if cfg.get("realMode", False):
@@ -722,6 +734,12 @@ async def scan_and_trade(state: dict, user_id: int = None):
     max_pos   = max(1, int(round(1 / alloc_pct)))
     open_syms = {p["symbol"] for p in state["positions"]}
     slots     = max_pos - len(state["positions"])
+
+    # Sottrai le commissioni round-trip attese per tutte le posizioni apribili
+    # fee_totale = size_per_trade * 1.2% * slot_disponibili
+    size_per_trade = tradable_capital * alloc_pct
+    fee_reserve = size_per_trade * COINBASE_FEE * 2 * slots  # entrata + uscita per ogni slot
+    tradable_capital_net = tradable_capital - fee_reserve
 
     # Non aprire nuove posizioni se maxTrades raggiunto
     if max_trades > 0 and state["tradeCount"] >= max_trades:
@@ -785,7 +803,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
 
     for d in candidates:
         add_log(state, "info", "SEGNALE", f"{d['symbol']} | {d.get('ema_reason', 'EMA off')}")
-        await enter_position(state, d, tradable_capital)
+        await enter_position(state, d, tradable_capital_net)
 
     _update_pnl(state)
 
