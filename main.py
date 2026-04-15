@@ -144,31 +144,47 @@ def calc_ema(prices: list, period: int) -> float:
         ema = price * k + ema * (1 - k)
     return ema
 
+def calc_rsi(prices: list, period: int = 14) -> float:
+    """Calcola RSI su una lista di prezzi close. Restituisce l'ultimo valore (0-100)."""
+    if len(prices) < period + 1:
+        return 50.0  # neutro se dati insufficienti
+    deltas = [prices[i] - prices[i-1] for i in range(1, len(prices))]
+    gains  = [d if d > 0 else 0.0 for d in deltas]
+    losses = [-d if d < 0 else 0.0 for d in deltas]
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    for i in range(period, len(deltas)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return round(100 - (100 / (1 + rs)), 2)
+
 async def fetch_candles_for_symbol(sym: str, client: httpx.AsyncClient) -> dict | None:
-    """Scarica candele 5min e 15min da Binance e calcola EMA20/50."""
+    """Scarica candele 5min, 15min e 1h da Binance. Calcola EMA20/50, RSI14, ATR."""
     pair = f"{sym}USDT"
     try:
-        r5 = await client.get(
-            f"{BINANCE_BASE}/api/v3/klines",
-            params={"symbol": pair, "interval": "5m", "limit": 60}
+        r5, r15, r1h = await asyncio.gather(
+            client.get(f"{BINANCE_BASE}/api/v3/klines", params={"symbol": pair, "interval": "5m",  "limit": 60}),
+            client.get(f"{BINANCE_BASE}/api/v3/klines", params={"symbol": pair, "interval": "15m", "limit": 60}),
+            client.get(f"{BINANCE_BASE}/api/v3/klines", params={"symbol": pair, "interval": "1h",  "limit": 60}),
         )
-        r15 = await client.get(
-            f"{BINANCE_BASE}/api/v3/klines",
-            params={"symbol": pair, "interval": "15m", "limit": 60}
-        )
-        if r5.status_code != 200 or r15.status_code != 200:
+        if r5.status_code != 200 or r15.status_code != 200 or r1h.status_code != 200:
             return None
 
         klines5  = r5.json()
         klines15 = r15.json()
+        klines1h = r1h.json()
 
-        if not isinstance(klines5, list) or not isinstance(klines15, list):
+        if not isinstance(klines5, list) or not isinstance(klines15, list) or not isinstance(klines1h, list):
             return None
-        if len(klines5) < 50 or len(klines15) < 50:
+        if len(klines5) < 50 or len(klines15) < 50 or len(klines1h) < 50:
             return None
 
         closes5  = [float(k[4]) for k in klines5]
         closes15 = [float(k[4]) for k in klines15]
+        closes1h = [float(k[4]) for k in klines1h]
         volumes5 = [float(k[5]) for k in klines5]
         lows5    = [float(k[3]) for k in klines5]
 
@@ -188,16 +204,22 @@ async def fetch_candles_for_symbol(sym: str, client: httpx.AsyncClient) -> dict 
         vol_avg_20 = sum(volumes5[-20:]) / 20 if len(volumes5) >= 20 else 0.0
         vol_last   = volumes5[-1]
 
+        # RSI(14) su 5m
+        rsi_14 = calc_rsi(closes5, 14)
+
         return {
             "ema20_5m":         calc_ema(closes5,  20),
             "ema50_5m":         calc_ema(closes5,  50),
             "ema20_15m":        calc_ema(closes15, 20),
             "ema50_15m":        calc_ema(closes15, 50),
+            "ema20_1h":         calc_ema(closes1h, 20),
+            "ema50_1h":         calc_ema(closes1h, 50),
             "last_close_5m":    closes5[-1],
             "atr_5m":           atr_5m,
             "pullback_low_5m":  pullback_low_5m,
             "vol_avg_20":       vol_avg_20,
             "vol_last":         vol_last,
+            "rsi_14":           rsi_14,
             "updated_at":       time.time(),
         }
     except Exception as e:
@@ -236,53 +258,64 @@ async def fetch_all_candles():
     print(f"Candele aggiornate: {updated}/{len(syms)}")
 
 def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0.015,
-                   vol_multiplier: float = 1.2, max_stop_pct: float = 0.025) -> dict:
+                   vol_multiplier: float = 1.2, max_stop_pct: float = 0.025,
+                   trend1h_filter: bool = True, rsi_filter: bool = True,
+                   rsi_min: float = 40.0, rsi_max: float = 60.0) -> dict:
     """
-    Analizza il segnale EMA + volume per una coin.
+    Analizza il segnale EMA + RSI + volume per una coin.
     Restituisce segnale, stop price contestuale e R (rischio per unità).
     """
     cd = candle_data.get(sym)
     if not cd:
-        return {"signal": False, "reason": "no candle data", "stop_price": 0.0, "R": 0.0}
+        return {"signal": False, "reason": "no candle data", "stop_price": 0.0, "R": 0.0,
+                "trend_ok": False, "pullback_ok": False, "bounce_ok": False,
+                "vol_ok": False, "stop_ok": False, "rsi_ok": True, "trend1h_ok": True}
 
     ema20_15m       = cd["ema20_15m"]
     ema50_15m       = cd["ema50_15m"]
     ema20_5m        = cd["ema20_5m"]
+    ema20_1h        = cd.get("ema20_1h", 0)
+    ema50_1h        = cd.get("ema50_1h", 0)
     last_close_5m   = cd["last_close_5m"]
     atr_5m          = cd["atr_5m"]
     pullback_low_5m = cd["pullback_low_5m"]
     vol_avg_20      = cd["vol_avg_20"]
     vol_last        = cd["vol_last"]
+    rsi_14          = cd.get("rsi_14", 50.0)
 
     # 1. Trend rialzista su 15min
     trend_ok = ema20_15m > ema50_15m
 
-    # 2. Prezzo vicino a EMA20 su 5min (pullback)
+    # 2. Trend rialzista su 1h (filtro superiore)
+    trend1h_ok = (ema20_1h > ema50_1h) if (trend1h_filter and ema20_1h > 0 and ema50_1h > 0) else True
+
+    # 3. Prezzo vicino a EMA20 su 5min (pullback)
     dist_from_ema20 = abs(current_price - ema20_5m) / ema20_5m
     pullback_ok = dist_from_ema20 <= pullback_tolerance
 
-    # 3. Ultima candela 5min chiusa sopra EMA20 (rimbalzo)
+    # 4. Ultima candela 5min chiusa sopra EMA20 (rimbalzo)
     bounce_ok = last_close_5m > ema20_5m
 
-    # 4. Volume candela corrente >= media * coefficiente
+    # 5. Volume candela corrente >= media * coefficiente
     vol_ok = (vol_avg_20 > 0) and (vol_last >= vol_avg_20 * vol_multiplier)
 
-    # Stop contestuale: il più basso tra minimo pullback e entry - 1xATR
-    # (calcolato su current_price come proxy entry)
+    # 6. RSI in zona neutrale (né ipercomprato né ipervenduto)
+    rsi_ok = (rsi_min <= rsi_14 <= rsi_max) if rsi_filter else True
+
+    # Stop contestuale
     stop_from_low = pullback_low_5m
     stop_from_atr = current_price - atr_5m if atr_5m > 0 else 0.0
     stop_price    = min(stop_from_low, stop_from_atr) if stop_from_atr > 0 else stop_from_low
 
-    # R = distanza percentuale entry → stop
     R = (current_price - stop_price) / current_price if stop_price > 0 else 0.0
-
-    # Se stop troppo largo rispetto al limite configurato → no trade
     stop_ok = 0 < R <= max_stop_pct
 
-    signal = trend_ok and pullback_ok and bounce_ok and vol_ok and stop_ok
+    signal = trend_ok and trend1h_ok and pullback_ok and bounce_ok and vol_ok and rsi_ok and stop_ok
 
-    if not trend_ok:
-        reason = f"no trend (EMA20 15m {ema20_15m:.4f} < EMA50 15m {ema50_15m:.4f})"
+    if not trend1h_ok:
+        reason = f"no trend 1h (EMA20 {ema20_1h:.4f} < EMA50 {ema50_1h:.4f})"
+    elif not trend_ok:
+        reason = f"no trend 15m (EMA20 {ema20_15m:.4f} < EMA50 {ema50_15m:.4f})"
     elif not pullback_ok:
         reason = f"no pullback (dist EMA20: {dist_from_ema20*100:.1f}% > {pullback_tolerance*100:.1f}%)"
     elif not bounce_ok:
@@ -290,12 +323,15 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
     elif not vol_ok:
         ratio = vol_last / vol_avg_20 if vol_avg_20 > 0 else 0
         reason = f"volume basso ({ratio:.1f}x media, richiesto {vol_multiplier}x)"
+    elif not rsi_ok:
+        reason = f"RSI fuori range ({rsi_14:.1f}, range {rsi_min:.0f}-{rsi_max:.0f})"
     elif not stop_ok:
         reason = f"stop troppo largo ({R*100:.1f}% > {max_stop_pct*100:.1f}%)" if R > 0 else "stop non calcolabile"
     else:
-        reason = (f"OK | EMA20/50 15m: {ema20_15m:.4f}/{ema50_15m:.4f} | "
+        reason = (f"OK | EMA20/50 1h: {ema20_1h:.4f}/{ema50_1h:.4f} | "
+                  f"EMA20/50 15m: {ema20_15m:.4f}/{ema50_15m:.4f} | "
                   f"dist EMA20: {dist_from_ema20*100:.2f}% | "
-                  f"vol: {vol_last/vol_avg_20:.1f}x | R: {R*100:.2f}%")
+                  f"RSI: {rsi_14:.1f} | vol: {vol_last/vol_avg_20:.1f}x | R: {R*100:.2f}%")
 
     return {
         "signal":      signal,
@@ -303,10 +339,13 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
         "stop_price":  round(stop_price, 8),
         "R":           round(R, 6),
         "trend_ok":    trend_ok,
+        "trend1h_ok":  trend1h_ok,
         "pullback_ok": pullback_ok,
         "bounce_ok":   bounce_ok,
         "vol_ok":      vol_ok,
+        "rsi_ok":      rsi_ok,
         "stop_ok":     stop_ok,
+        "rsi":         rsi_14,
     }
 
 # ── rest of market data ───────────────────────────────────────────────────────
@@ -451,9 +490,10 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
 
     R_pct = (price - stop_price) / price  # rischio in % per questa posizione
 
-    # TP1 = entry + 1R, TP2 = entry + 1.5R
+    # TP1 = entry + 1R, TP2 = entry + tp2R (default 2.5R)
+    tp2_multiplier = cfg.get("tp2R", 2.5)
     tp1_price = price * (1 + R_pct)
-    tp2_price = price * (1 + R_pct * 1.5)
+    tp2_price = price * (1 + R_pct * tp2_multiplier)
 
     if is_real:
         cb_key    = state.get("cb_key", "") or _ENV_CB_KEY
@@ -486,7 +526,7 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
             # Ricalcola stop e TP sull'actual price
             stop_price  = actual_price * (1 - R_pct)
             tp1_price   = actual_price * (1 + R_pct)
-            tp2_price   = actual_price * (1 + R_pct * 1.5)
+            tp2_price   = actual_price * (1 + R_pct * tp2_multiplier)
             add_log(state, "buy", "ACQUISTO REALE",
                 f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | "
                 f"SL: ${stop_price:.4f} | TP1: ${tp1_price:.4f} | TP2: ${tp2_price:.4f} | R: {R_pct*100:.2f}%")
@@ -577,14 +617,15 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
     pnl -= exit_fee  # riduce il PnL netto
 
     if partial:
-        # TP1: restituisce metà capitale, aggiorna size_remaining, sposta stop a breakeven
+        # TP1: restituisce metà capitale, aggiorna size_remaining
+        # Il nuovo stop viene gestito dal trailing in scan_and_trade
         state["currentCapital"] += close_size + pnl
         pos["size_remaining"] -= close_size
-        pos["stopPrice"]       = pos["entryPrice"]  # breakeven
+        pos["stopPrice"]       = pos["entryPrice"]  # breakeven minimo
         pos["tp1_hit"]         = True
         mode = "REALE" if pos.get("realMode") else "SIM"
         add_log(state, "sell", f"TP1 {mode}",
-            f"{sym} 50% @ ${cur:.4f} | +{pnl:.2f}$ ({pct:+.2f}%) | stop → breakeven")
+            f"{sym} 50% @ ${cur:.4f} | +{pnl:.2f}$ ({pct:+.2f}%) | trailing stop attivo")
         if pos.get("realMode"):
             await send_telegram(
                 "TP1 REALE\n" + sym + " 50% @ $" + f"{cur:.4f}" +
@@ -674,10 +715,12 @@ async def scan_and_trade(state: dict, user_id: int = None):
             add_log(state, "info", "STOP AUTO", f"Raggiunto limite di {max_trades} trade — sessione fermata")
             return
 
-    # Gestione posizioni aperte: TP1, TP2, stop loss
+    # Gestione posizioni aperte: TP1, TP2, trailing stop, stop loss
     for pos in list(state["positions"]):
         cur   = pos["currentPrice"]
         entry = pos["entryPrice"]
+        trailing_stop   = cfg.get("trailingStop", True)
+        trailing_pct    = cfg.get("trailingPct", 0.5)
 
         if cur > pos.get("highPrice", cur):
             pos["highPrice"] = cur
@@ -687,14 +730,23 @@ async def scan_and_trade(state: dict, user_id: int = None):
             await exit_position(state, pos, "TP1", partial=True, user_id=user_id)
             continue
 
-        # TP2: tocca +1.5R → chiude tutto il rimanente
-        if pos.get("tp1_hit", False) and cur >= pos["tp2Price"]:
-            await exit_position(state, pos, "TP2", user_id=user_id)
-            continue
+        # Dopo TP1: trailing stop (segue il massimo * trailingPct invece di breakeven fisso)
+        if pos.get("tp1_hit", False):
+            if trailing_stop and pos.get("highPrice", 0) > 0:
+                trail_price = pos["highPrice"] * (1 - trailing_pct * pos["R_pct"])
+                # Lo stop non può scendere sotto il breakeven
+                new_stop = max(trail_price, pos["entryPrice"])
+                if new_stop > pos["stopPrice"]:
+                    pos["stopPrice"] = new_stop
 
-        # Stop loss (include breakeven dopo TP1)
+            # TP2
+            if cur >= pos["tp2Price"]:
+                await exit_position(state, pos, "TP2", user_id=user_id)
+                continue
+
+        # Stop loss (include trailing/breakeven dopo TP1)
         if cur <= pos["stopPrice"]:
-            reason = "STOP BREAKEVEN" if pos.get("tp1_hit") else "STOP LOSS"
+            reason = "STOP TRAILING" if pos.get("tp1_hit") else "STOP LOSS"
             await exit_position(state, pos, reason, user_id=user_id)
 
     alloc_pct   = cfg.get("allocPct", 0.20)
@@ -752,19 +804,28 @@ async def scan_and_trade(state: dict, user_id: int = None):
 
     prices_ok = [sym for sym, d in market_data.items() if d["price"] > 0]
 
-    # Filtro BTC trend
-    btc    = market_data.get("BTC", {})
-    btc_1h = btc.get("change1h", 0)
-    if btc_1h < -0.3:
-        add_log(state, "info", "PAUSA", f"BTC {btc_1h:+.2f}% 1h — agente in attesa")
-        _update_pnl(state)
-        return
+    # Filtro BTC: deve essere sopra EMA20 su 1h (trend superiore positivo)
+    btc_cd = candle_data.get("BTC", {})
+    btc_ema20_1h = btc_cd.get("ema20_1h", 0)
+    btc_ema50_1h = btc_cd.get("ema50_1h", 0)
+    btc_price    = market_data.get("BTC", {}).get("price", 0)
+    btc_filter   = cfg.get("btcEmaFilter", True)
+    if btc_filter and btc_ema20_1h > 0 and btc_price > 0:
+        if btc_price < btc_ema20_1h:
+            add_log(state, "info", "PAUSA",
+                f"BTC sotto EMA20 1h (${btc_price:.0f} < ${btc_ema20_1h:.0f}) — agente in attesa")
+            _update_pnl(state)
+            return
 
-    min_vol      = cfg.get("minVolume", 0)
-    ema_filter   = cfg.get("emaFilter", True)
-    pullback_tol = cfg.get("pullbackTolerance", 0.015)
-    vol_mult     = cfg.get("volMultiplier", 1.2)
-    max_stop_pct = cfg.get("maxStopPct", 0.025)
+    min_vol       = cfg.get("minVolume", 0)
+    ema_filter    = cfg.get("emaFilter", True)
+    pullback_tol  = cfg.get("pullbackTolerance", 0.015)
+    vol_mult      = cfg.get("volMultiplier", 1.2)
+    max_stop_pct  = cfg.get("maxStopPct", 0.025)
+    trend1h_filter = cfg.get("trend1hFilter", True)
+    rsi_filter    = cfg.get("rsiFilter", True)
+    rsi_min       = cfg.get("rsiMin", 40.0)
+    rsi_max       = cfg.get("rsiMax", 60.0)
 
     universe = [
         {**d, "symbol": sym}
@@ -783,7 +844,8 @@ async def scan_and_trade(state: dict, user_id: int = None):
     for d in universe_sorted:
         sym = d["symbol"]
         if ema_filter:
-            signal = get_ema_signal(sym, d["price"], pullback_tol, vol_mult, max_stop_pct)
+            signal = get_ema_signal(sym, d["price"], pullback_tol, vol_mult, max_stop_pct,
+                                    trend1h_filter, rsi_filter, rsi_min, rsi_max)
             if not signal["signal"]:
                 ema_skipped += 1
                 continue
@@ -1146,11 +1208,14 @@ def get_market():
         item = {"symbol": s, **d}
         sig = get_ema_signal(s, d["price"])
         item["ema"] = {
-            "trend":    sig["trend_ok"],
-            "pullback": sig["pullback_ok"],
-            "volume":   sig["vol_ok"],
-            "stop":     sig["stop_ok"],
-            "signal":   sig["signal"],
+            "trend":      sig["trend_ok"],
+            "trend1h_ok": sig["trend1h_ok"],
+            "pullback":   sig["pullback_ok"],
+            "volume":     sig["vol_ok"],
+            "rsi_ok":     sig["rsi_ok"],
+            "stop":       sig["stop_ok"],
+            "signal":     sig["signal"],
+            "rsi":        sig.get("rsi", 50),
         }
         items.append(item)
     result = sorted(items, key=lambda x: x["change24h"], reverse=True)
@@ -1235,6 +1300,14 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
             "maxStopPct":          float(cfg.get("maxStopPct", 0.025)),
             "maxTrades":           int(cfg.get("maxTrades", 0)),
             "maxConsecutiveLosses": int(cfg.get("maxConsecutiveLosses", 3)),
+            "trend1hFilter":       bool(cfg.get("trend1hFilter", True)),
+            "btcEmaFilter":        bool(cfg.get("btcEmaFilter", True)),
+            "rsiFilter":           bool(cfg.get("rsiFilter", True)),
+            "rsiMin":              float(cfg.get("rsiMin", 40.0)),
+            "rsiMax":              float(cfg.get("rsiMax", 60.0)),
+            "tp2R":                float(cfg.get("tp2R", 2.5)),
+            "trailingStop":        bool(cfg.get("trailingStop", True)),
+            "trailingPct":         float(cfg.get("trailingPct", 0.5)),
         },
         "cooldowns": {}, "tradeCount": 0, "wins": 0, "trades": [], "log": [],
         "cb_key": cb_key, "cb_secret": cb_secret,
@@ -1248,9 +1321,14 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
     ptol   = float(cfg.get("pullbackTolerance", 0.015)) * 100
     mt     = int(cfg.get("maxTrades", 0))
     mcl    = int(cfg.get("maxConsecutiveLosses", 3))
+    tp2r   = float(cfg.get("tp2R", 2.5))
+    rsi_s  = f"{cfg.get('rsiMin',40):.0f}-{cfg.get('rsiMax',60):.0f}" if cfg.get("rsiFilter", True) else "OFF"
+    t1h_s  = "ON" if cfg.get("trend1hFilter", True) else "OFF"
+    trl_s  = f"{cfg.get('trailingPct',0.5)*100:.0f}%" if cfg.get("trailingStop", True) else "OFF"
     add_log(state, "info", "AVVIO",
-        f"${capital:.0f} | {mode} | Cap: {capp:.0f}% | Alloc: {alloc:.0f}% | Vol: ${vol:.0f}M | "
-        f"EMA: {ema_s} | Pullback: {ptol:.1f}% | MaxTrade: {mt or 'inf'} | MaxLoss: {mcl}"
+        f"${capital:.0f} | {mode} | Cap: {capp:.0f}% | Alloc: {alloc:.0f}% | "
+        f"EMA: {ema_s} | Trend1h: {t1h_s} | RSI: {rsi_s} | "
+        f"TP2: {tp2r}R | Trailing: {trl_s} | MaxLoss: {mcl}"
     )
     return {"ok": True}
 
