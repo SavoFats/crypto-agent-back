@@ -1261,8 +1261,20 @@ const LOGO_URLS = {
   HBAR:'https://assets.coingecko.com/coins/images/3688/small/hbar.png',
   AAVE:'https://assets.coingecko.com/coins/images/12645/small/AAVE.png',
   GRT:'https://assets.coingecko.com/coins/images/13397/small/Graph_Token.png',
+  // Coin mancanti o con ID errato
+  CHZ:'https://assets.coingecko.com/coins/images/8834/small/CHZ_Token_updated.png',
+  BIO:'https://assets.coingecko.com/coins/images/31069/small/bio.png',
+  WLFI:'https://assets.coingecko.com/coins/images/39344/small/wlfi.jpg',
+  RED:'https://assets.coingecko.com/coins/images/34455/small/red.png',
+  KITE:'https://assets.coingecko.com/coins/images/36758/small/kite.png',
+  CTSI:'https://assets.coingecko.com/coins/images/11038/small/cartesi.png',
+  WCT:'https://assets.coingecko.com/coins/images/39384/small/wct.jpg',
+  PENGU:'https://assets.coingecko.com/coins/images/36129/small/pengu.png',
+  TRUMP:'https://assets.coingecko.com/coins/images/39189/small/trump.jpg',
+  BARD:'https://assets.coingecko.com/coins/images/38900/small/bard.jpg',
   ZAMA:'https://assets.coingecko.com/coins/images/37479/small/zama.png',
-  PENGU:'https://assets.coingecko.com/coins/images/36158/small/pengu.png',
+  ASTER:'https://assets.coingecko.com/coins/images/35276/small/aster.png',
+  XPL:'https://assets.coingecko.com/coins/images/38444/small/xpl.png',
   CAKE:'https://assets.coingecko.com/coins/images/12632/small/pancakeswap-cake-logo.png',
   XPL:'https://assets.coingecko.com/coins/images/38444/small/xpl.png',
   PLUME:'https://assets.coingecko.com/coins/images/39352/small/plume.jpg',
@@ -1275,7 +1287,31 @@ const LOGO_URLS = {
   ZEC:'https://assets.coingecko.com/coins/images/486/small/circle-zcash-color.png',
   TREE:'https://assets.coingecko.com/coins/images/39972/small/tree.jpg',
 };
-function getLogo(sym) { return LOGO_URLS[sym] || null; }
+const _logoCache = {};
+function getLogo(sym) {
+  if (LOGO_URLS[sym]) return LOGO_URLS[sym];
+  if (_logoCache[sym] !== undefined) return _logoCache[sym] || null;
+  // Segnaposto mentre carica
+  _logoCache[sym] = null;
+  fetch(`https://api.coingecko.com/api/v3/search?query=${sym}`)
+    .then(r => r.json())
+    .then(d => {
+      const coin = (d.coins || []).find(c => c.symbol.toUpperCase() === sym);
+      if (coin && coin.large) {
+        // Converti URL large → small
+        _logoCache[sym] = coin.large.replace('/large/', '/small/');
+        // Aggiorna tutte le img con questo simbolo già nel DOM
+        document.querySelectorAll(`[data-logo-sym="${sym}"]`).forEach(img => {
+          img.src = _logoCache[sym];
+          img.style.display = '';
+          const ph = img.nextElementSibling;
+          if (ph) ph.style.display = 'none';
+        });
+      }
+    })
+    .catch(() => {});
+  return null;
+}
 
 // ── STATE ────────────────────────────────────────────────────────────────────
 let S = { running:false, capital:0, currentCapital:0, pnl:0, pct:0, tradeCount:0, winRate:0, positions:[], pnlHistory:[], log:[], remainingMs:0 };
@@ -2108,7 +2144,7 @@ function renderMarket() {
       <div class="mkt-row-main">
         <div class="mkt-coin">
           <div class="mkt-logo-wrap">
-            <img src="${getLogo(c.symbol)}" class="mkt-logo" onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <img src="${getLogo(c.symbol)}" class="mkt-logo" data-logo-sym="${c.symbol}" onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex'">
             <div class="mkt-icon-placeholder" style="display:none">${c.symbol[0]}</div>
           </div>
           <div>
@@ -2286,7 +2322,7 @@ function renderHomeWatchlist() {
     const chgText = d ? (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%' : '--';
     return `<div class="watchlist-row">
       <div style="display:flex;align-items:center;gap:10px">
-        ${logo ? `<img src="${logo}" style="width:32px;height:32px;border-radius:50%" onerror="this.style.display='none'">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text2)">${sym[0]}</div>`}
+        ${logo ? `<img src="${logo}" data-logo-sym="${sym}" style="width:32px;height:32px;border-radius:50%" onerror="this.style.display='none'">` : `<div style="width:32px;height:32px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text2)">${sym[0]}</div>`}
         <div>
           <div style="font-size:14px;font-weight:700">${getCoinName(sym)}</div>
           <div style="font-size:11px;color:var(--text3);font-weight:500">${sym}</div>
