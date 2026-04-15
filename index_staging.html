@@ -115,20 +115,20 @@ html { overflow-x:hidden; }
 .tab.active::after { opacity:1; }
 
 .pages { position:fixed; top:calc(var(--hdr-h) + env(safe-area-inset-top, 0px)); bottom:calc(var(--tab-h) + env(safe-area-inset-bottom, 0px)); left:0; right:0; overflow:hidden; }
-.page { position:absolute; inset:0; overflow-y:auto; padding:16px; display:none; }
+.page { position:absolute; inset:0; overflow-y:auto; padding:20px; display:none; }
 .page.active { display:block; }
 
-.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:12px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:16px; }
 .card-label { font-size:11px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:14px; }
 
-.sess-banner { background:linear-gradient(135deg, rgba(0,82,255,0.15), rgba(0,82,255,0.05)); border:1px solid rgba(0,82,255,0.3); border-radius:var(--radius); padding:16px 20px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; transition:all 0.3s; }
+.sess-banner { background:linear-gradient(135deg, rgba(0,82,255,0.15), rgba(0,82,255,0.05)); border:1px solid rgba(0,82,255,0.3); border-radius:var(--radius); padding:16px 20px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; transition:all 0.3s; }
 .sess-banner.off { background:var(--surface); border-color:var(--border); }
 .sess-label { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px; }
 .sess-time { font-size:28px; font-weight:700; color:var(--blue); letter-spacing:-0.02em; font-variant-numeric:tabular-nums; }
 .sess-banner.off .sess-time { font-size:22px; color:var(--text3); }
 .sess-pnl { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; }
 
-.kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+.kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
 .kpi { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; }
 .kpi-label { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; }
 .kpi-value { font-size:22px; font-weight:700; color:var(--text); letter-spacing:-0.02em; font-variant-numeric:tabular-nums; }
@@ -491,7 +491,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
   <div class="page" id="page-home">
     <div class="ptr-indicator" id="ptr-page-home"><div class="ptr-spinner"></div></div>
 
-    <div class="home-welcome" style="padding:24px 0 20px">
+    <div class="home-welcome" style="padding:16px 0 20px">
       <div class="home-welcome-sub">Benvenuto</div>
       <div class="home-username" id="homeUsername">--</div>
     </div>
@@ -504,7 +504,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     </div>
 
     <!-- Watchlist -->
-    <div class="card" style="padding-bottom:0">
+    <div class="card">
       <div class="card-label">Preferiti</div>
       <div id="homeWatchlist">
         <div class="empty" style="padding:24px 0"><div class="empty-text">Aggiungi coin dai preferiti nel Mercato</div></div>
@@ -512,21 +512,21 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     </div>
 
     <!-- Avvia sessione -->
-    <div id="homeStartBtnWrap" style="display:flex;justify-content:center">
+    <div style="display:flex;justify-content:center;margin-bottom:16px">
       <button id="homeStartBtn" onclick="openDrawer()" style="display:inline-flex;align-items:center;gap:8px;padding:13px 28px;background:var(--blue);border:none;border-radius:var(--radius);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans);box-shadow:0 4px 20px rgba(0,82,255,0.25);transition:all 0.15s;letter-spacing:-0.01em">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Avvia sessione
       </button>
     </div>
     <!-- Widget sessione in corso -->
-    <div class="card" id="homeSessionWidget" style="display:none;margin-top:12px">
+    <div class="card" id="homeSessionWidget">
       <div class="card-label" style="margin-bottom:10px">Sessione in corso</div>
       <div id="homeSessionContent">
         <div class="empty" style="padding:16px 0"><div class="empty-text" style="color:var(--text3)">Nessuna sessione attiva</div></div>
       </div>
     </div>
 
-    <div style="height:8px"></div>
+    <div style="height:16px"></div>
   </div>
 
   <!-- CONFIG -->
@@ -695,7 +695,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
       </div>
     </div>
     <!-- Mini-log agente -->
-    <div id="agentActivityWrap" style="display:none;margin-bottom:12px">
+    <div id="agentActivityWrap" style="display:none;margin-bottom:16px">
       <div class="card" style="padding:14px 16px">
         <div class="card-label" style="margin-bottom:10px">Attivita agente</div>
         <div id="agentActivityList"></div>
@@ -1754,6 +1754,7 @@ function renderHomeSession() {
   if (startBtnWrap) startBtnWrap.style.display = S.running ? 'none' : 'flex';
   if (!S.running) { widget.style.display = 'none'; return; }
   widget.style.display = 'block';
+  if (!S.running) { cnt.innerHTML = ''; return; }
   const pos = S.positions || [];
   if (pos.length === 0) {
     cnt.innerHTML = '<div style="text-align:center;padding:16px 0;font-size:13px;color:var(--text3);font-weight:500">Scan mercato in corso</div>';
