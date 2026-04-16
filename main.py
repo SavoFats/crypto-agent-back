@@ -501,6 +501,12 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
     # Fee di entrata (sempre applicata, in reale la detrae Coinbase, in sim la contabilizziamo noi)
     entry_fee = size * COINBASE_FEE
 
+    # Funzione per formattare prezzi con abbastanza decimali (gestisce coin micro come PEPE)
+    def fmt_price(p: float) -> str:
+        if p >= 1: return f"${p:.4f}"
+        if p >= 0.0001: return f"${p:.6f}"
+        return f"${p:.8f}"
+
     # Stop price: dalla funzione EMA signal (contestuale ATR/low)
     # Fallback: stop fisso da config
     stop_price = sym_data.get("stop_price", 0.0)
@@ -548,8 +554,8 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
             tp1_price   = actual_price * (1 + R_pct)
             tp2_price   = actual_price * (1 + R_pct * tp2_multiplier)
             add_log(state, "buy", "ACQUISTO REALE",
-                f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | "
-                f"SL: ${stop_price:.4f} | TP1: ${tp1_price:.4f} | TP2: ${tp2_price:.4f} | R: {R_pct*100:.2f}%")
+                f"{sym} @ {fmt_price(actual_price)} | Size: ${size:.0f} | Fee: ${entry_fee:.2f} | "
+                f"SL: {fmt_price(stop_price)} | TP1: {fmt_price(tp1_price)} | TP2: {fmt_price(tp2_price)} | R: {R_pct*100:.2f}%")
             await send_telegram(
                 "ACQUISTO REALE\n" + sym + " @ $" + f"{actual_price:.4f}" +
                 "\nSize: $" + f"{size:.2f}" +
@@ -562,8 +568,8 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
     else:
         actual_price = price
         add_log(state, "buy", "ACQUISTO SIM",
-            f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | Fee: ${entry_fee:.2f} | "
-            f"SL: ${stop_price:.4f} | TP1: ${tp1_price:.4f} | TP2: ${tp2_price:.4f} | R: {R_pct*100:.2f}%")
+            f"{sym} @ {fmt_price(actual_price)} | Size: ${size:.0f} | Fee: ${entry_fee:.2f} | "
+            f"SL: {fmt_price(stop_price)} | TP1: {fmt_price(tp1_price)} | TP2: {fmt_price(tp2_price)} | R: {R_pct*100:.2f}%")
 
     # In sim sottraiamo anche la fee di entrata dal capitale disponibile
     state["currentCapital"] -= size + (entry_fee if not is_real else 0)
@@ -692,10 +698,15 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
                 )
         except Exception as e:
             print(f"DB trade save error: {e}")
+    def _fp(p):
+        if p >= 1: return f"${p:.4f}"
+        if p >= 0.0001: return f"${p:.6f}"
+        return f"${p:.8f}"
+
     state["positions"] = [p for p in state["positions"] if p is not pos]
     mode = "REALE" if pos.get("realMode") else "SIM"
     add_log(state, "sell", f"{reason} {mode}",
-        f"{sym} @ ${cur:.4f} | {pnl:+.2f}$ ({pct:+.2f}%) | fee: ${exit_fee:.2f} | {dur:.0f} min")
+        f"{sym} @ {_fp(cur)} | {pnl:+.2f}$ ({pct:+.2f}%) | fee: ${exit_fee:.2f} | {dur:.0f} min")
     if pos.get("realMode"):
         esito = "PROFITTO" if pnl >= 0 else "PERDITA"
         msg = ("VENDITA REALE - " + esito + "\n" + sym + " @ $" + f"{cur:.4f}" +
