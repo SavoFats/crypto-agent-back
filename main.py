@@ -272,7 +272,8 @@ async def fetch_all_candles():
 def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0.015,
                    vol_multiplier: float = 1.2, max_stop_pct: float = 0.025,
                    trend1h_filter: bool = True, rsi_filter: bool = True,
-                   rsi_min: float = 35.0, rsi_max: float = 70.0) -> dict:
+                   rsi_min: float = 35.0, rsi_max: float = 70.0,
+                   min_r: float = 0.01) -> dict:
     """
     Analizza il segnale EMA + RSI + volume per una coin.
     Restituisce segnale, stop price contestuale e R (rischio per unità).
@@ -325,7 +326,7 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
     stop_price    = min(stop_from_low, stop_from_atr) if stop_from_atr > 0 else stop_from_low
 
     R = (current_price - stop_price) / current_price if stop_price > 0 else 0.0
-    stop_ok = 0 < R <= max_stop_pct
+    stop_ok = min_r <= R <= max_stop_pct
 
     signal = trend_ok and trend1h_ok and pullback_ok and bounce_ok and vol_ok and rsi_ok and body_ok and stop_ok
 
@@ -345,7 +346,12 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
     elif not body_ok:
         reason = f"candela debole (corpo {body_ratio*100:.0f}% del range, min 30%)" if candle_body > 0 else "candela ribassista — no entrata"
     elif not stop_ok:
-        reason = f"stop troppo largo ({R*100:.1f}% > {max_stop_pct*100:.1f}%)" if R > 0 else "stop non calcolabile"
+        if R > 0 and R < min_r:
+            reason = f"R troppo piccolo ({R*100:.2f}% < {min_r*100:.1f}% min) — fee mangerebbero il profitto"
+        elif R > max_stop_pct:
+            reason = f"stop troppo largo ({R*100:.1f}% > {max_stop_pct*100:.1f}%)"
+        else:
+            reason = "stop non calcolabile"
     else:
         reason = (f"OK | EMA20/50 1h: {ema20_1h:.4f}/{ema50_1h:.4f} | "
                   f"EMA20/50 15m: {ema20_15m:.4f}/{ema50_15m:.4f} | "
@@ -863,8 +869,9 @@ async def scan_and_trade(state: dict, user_id: int = None):
     max_stop_pct  = cfg.get("maxStopPct", 0.025)
     trend1h_filter = cfg.get("trend1hFilter", True)
     rsi_filter    = cfg.get("rsiFilter", True)
-    rsi_min       = cfg.get("rsiMin", 40.0)
-    rsi_max       = cfg.get("rsiMax", 60.0)
+    rsi_min       = cfg.get("rsiMin", 35.0)
+    rsi_max       = cfg.get("rsiMax", 70.0)
+    min_r         = cfg.get("minR", 0.01)
 
     universe = [
         {**d, "symbol": sym}
@@ -885,7 +892,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
         sym = d["symbol"]
         if ema_filter:
             signal = get_ema_signal(sym, d["price"], pullback_tol, vol_mult, max_stop_pct,
-                                    trend1h_filter, rsi_filter, rsi_min, rsi_max)
+                                    trend1h_filter, rsi_filter, rsi_min, rsi_max, min_r)
             if not signal["signal"]:
                 ema_skipped += 1
                 # Conta quale filtro ha bloccato
@@ -1265,8 +1272,9 @@ def get_market():
     max_stop_pct   = active_cfg.get("maxStopPct", 0.025)
     trend1h_filter = active_cfg.get("trend1hFilter", True)
     rsi_filter     = active_cfg.get("rsiFilter", True)
-    rsi_min        = active_cfg.get("rsiMin", 40.0)
-    rsi_max        = active_cfg.get("rsiMax", 60.0)
+    rsi_min        = active_cfg.get("rsiMin", 35.0)
+    rsi_max        = active_cfg.get("rsiMax", 70.0)
+    min_r          = active_cfg.get("minR", 0.01)
 
     for s, d in market_data.items():
         if d["price"] <= 0:
@@ -1275,7 +1283,7 @@ def get_market():
             continue
         item = {"symbol": s, **d}
         sig = get_ema_signal(s, d["price"], pullback_tol, vol_mult, max_stop_pct,
-                             trend1h_filter, rsi_filter, rsi_min, rsi_max)
+                             trend1h_filter, rsi_filter, rsi_min, rsi_max, min_r)
         item["ema"] = {
             "trend":      sig["trend_ok"],
             "trend1h_ok": sig["trend1h_ok"],
@@ -1375,6 +1383,7 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
             "rsiFilter":           bool(cfg.get("rsiFilter", True)),
             "rsiMin":              float(cfg.get("rsiMin", 35.0)),
             "rsiMax":              float(cfg.get("rsiMax", 70.0)),
+            "minR":                float(cfg.get("minR", 0.01)),
             "tp2R":                float(cfg.get("tp2R", 2.5)),
             "trailingStop":        bool(cfg.get("trailingStop", True)),
             "trailingPct":         float(cfg.get("trailingPct", 0.5)),
