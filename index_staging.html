@@ -850,13 +850,13 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <!-- Filtri dropdown custom -->
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <div class="fdd" id="fddPeriod">
-        <div class="fdd-btn" onclick="toggleFdd('fddPeriod')" id="fddPeriodBtn">Oggi <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div class="fdd-btn" onclick="toggleFdd('fddPeriod')" id="fddPeriodBtn">Sempre <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
         <div class="fdd-menu" id="fddPeriodMenu">
-          <div class="fdd-item selected" onclick="selectFdd('fddPeriod','today','Oggi','period')">Oggi</div>
+          <div class="fdd-item selected" onclick="selectFdd('fddPeriod','all','Sempre','period')">Sempre</div>
+          <div class="fdd-item" onclick="selectFdd('fddPeriod','today','Oggi','period')">Oggi</div>
           <div class="fdd-item" onclick="selectFdd('fddPeriod','week','7 giorni','period')">7 giorni</div>
           <div class="fdd-item" onclick="selectFdd('fddPeriod','month','30 giorni','period')">30 giorni</div>
           <div class="fdd-item" onclick="selectFdd('fddPeriod','6m','6 mesi','period')">6 mesi</div>
-          <div class="fdd-item" onclick="selectFdd('fddPeriod','all','Sempre','period')">Sempre</div>
         </div>
       </div>
       <div class="fdd" id="fddOutcome">
@@ -1997,7 +1997,7 @@ async function confirmClosePosition() {
 }
 
 // ── FILTRI TRANSAZIONI ───────────────────────────────────────────────────────
-const txFilters = { period: 'today', outcome: 'all', reason: 'all' };
+const txFilters = { period: 'all', outcome: 'all', reason: 'all' };
 
 function setTxDropdown(type, val) {
   txFilters[type] = val;
@@ -2011,13 +2011,18 @@ function setTxFilter(type, val, btn) {
 
 function applyTxFilters(list) {
   const now = Date.now();
-  const periods = { today: 86400000, week: 7*86400000, month: 30*86400000, '6m': 180*86400000 };
+  // Mezzanotte di oggi (ora locale)
+  const midnight = new Date(); midnight.setHours(0,0,0,0);
+  const midnightTs = midnight.getTime();
+  const periods = { week: 7*86400000, month: 30*86400000, '6m': 180*86400000 };
   return list.filter(t => {
     // Filtro modalità: sim mostra solo sim, reale mostra solo reale
     if (_simMode && t.realMode) return false;
     if (!_simMode && !t.realMode) return false;
     // Periodo
-    if (txFilters.period !== 'all') {
+    if (txFilters.period === 'today') {
+      if (new Date(t.time).getTime() < midnightTs) return false;
+    } else if (txFilters.period !== 'all') {
       const age = now - new Date(t.time).getTime();
       if (age > periods[txFilters.period]) return false;
     }
