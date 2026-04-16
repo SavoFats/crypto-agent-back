@@ -556,7 +556,10 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <input type="hidden" id="capital">
 
     <div class="field">
-      <div class="field-label">Capitale da tradare <span id="capitalPctVal">100%</span> · <span id="capitalDisplay" style="color:var(--blue)">$0</span></div>
+      <div class="field-label">
+        <span style="color:var(--text);font-weight:600">Capitale da tradare &nbsp;<span id="capitalPctVal" style="color:var(--blue)">100%</span></span>
+        <span id="capitalDisplay" style="color:var(--blue)">$1,000.00</span>
+      </div>
       <input type="range" id="capitalPct" min="10" max="100" value="100" step="5" oninput="updateCapitalPct()">
       <div class="field-hint" id="capitalHint">Percentuale del saldo disponibile da mettere in gioco</div>
     </div>
