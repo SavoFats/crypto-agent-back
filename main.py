@@ -119,7 +119,7 @@ async def coinbase_request(method: str, path: str, body: dict = None,
 
 # ── market data ───────────────────────────────────────────────────────────────
 
-market_data = {}  # sym -> {price, change1h, change24h, volume24h, priceHistory, icon}
+market_data = {}  # sym -> {price, change1h, change24h, volume24h, icon}
 user_sessions: dict = {}
 
 # ── CANDLE DATA (nuovo) ───────────────────────────────────────────────────────
@@ -215,6 +215,7 @@ async def fetch_candles_for_symbol(sym: str, client: httpx.AsyncClient) -> dict 
             "ema20_1h":         calc_ema(closes1h, 20),
             "ema50_1h":         calc_ema(closes1h, 50),
             "last_close_5m":    closes5[-1],
+            "close_1h_ago":     closes1h[-2],  # close della candela 1h precedente = 1h fa esatto
             "atr_5m":           atr_5m,
             "pullback_low_5m":  pullback_low_5m,
             "vol_avg_20":       vol_avg_20,
@@ -326,7 +327,12 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
     elif not rsi_ok:
         reason = f"RSI fuori range ({rsi_14:.1f}, range {rsi_min:.0f}-{rsi_max:.0f})"
     elif not stop_ok:
-        reason = f"stop troppo largo ({R*100:.1f}% > {max_stop_pct*100:.1f}%)" if R > 0 else "stop non calcolabile"
+        if R > 0 and R < min_r:
+            reason = f"R troppo piccolo ({R*100:.2f}% < {min_r*100:.1f}% min) — fee mangerebbero il profitto"
+        elif R > max_stop_pct:
+            reason = f"stop troppo largo ({R*100:.1f}% > {max_stop_pct*100:.1f}%)"
+        else:
+            reason = "stop non calcolabile"
     else:
         reason = (f"OK | EMA20/50 1h: {ema20_1h:.4f}/{ema50_1h:.4f} | "
                   f"EMA20/50 15m: {ema20_15m:.4f}/{ema50_15m:.4f} | "
@@ -403,22 +409,16 @@ async def fetch_prices():
             if sym not in market_data:
                 market_data[sym] = {
                     "price": 0.0, "change1h": 0.0, "change24h": 0.0,
-                    "volume24h": 0.0, "priceHistory": [], "icon": sym[0]
+                    "volume24h": 0.0, "icon": sym[0]
                 }
 
-            hist = market_data[sym]["priceHistory"]
-            hist.append(price)
-            if len(hist) > 450:
-                hist.pop(0)
+            # change1h: usa close_1h_ago dalle candele Binance — dato preciso
+            # Se le candele non sono ancora disponibili mostra 0.0 (nessuna stima)
+            cd = candle_data.get(sym)
+            change1h = (price - cd["close_1h_ago"]) / cd["close_1h_ago"] * 100 if (cd and cd.get("close_1h_ago", 0) > 0) else 0.0
 
-            if len(hist) >= 10:
-                price_1h_ago = hist[0]
-                change1h = (price - price_1h_ago) / price_1h_ago * 100
-            else:
-                change1h = change24h * 0.04
-
-            market_data[sym]["price"] = price
-            market_data[sym]["change1h"] = change1h
+            market_data[sym]["price"]     = price
+            market_data[sym]["change1h"]  = change1h
             market_data[sym]["change24h"] = change24h
             market_data[sym]["volume24h"] = vol_usd
 
@@ -481,6 +481,12 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
     # Fee di entrata (sempre applicata, in reale la detrae Coinbase, in sim la contabilizziamo noi)
     entry_fee = size * COINBASE_FEE
 
+    # Funzione per formattare prezzi con abbastanza decimali (gestisce coin micro come PEPE)
+    def fmt_price(p: float) -> str:
+        if p >= 1: return f"${p:.4f}"
+        if p >= 0.0001: return f"${p:.6f}"
+        return f"${p:.8f}"
+
     # Stop price: dalla funzione EMA signal (contestuale ATR/low)
     # Fallback: stop fisso da config
     stop_price = sym_data.get("stop_price", 0.0)
@@ -528,8 +534,8 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
             tp1_price   = actual_price * (1 + R_pct)
             tp2_price   = actual_price * (1 + R_pct * tp2_multiplier)
             add_log(state, "buy", "ACQUISTO REALE",
-                f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | "
-                f"SL: ${stop_price:.4f} | TP1: ${tp1_price:.4f} | TP2: ${tp2_price:.4f} | R: {R_pct*100:.2f}%")
+                f"{sym} @ {fmt_price(actual_price)} | Size: ${size:.0f} | Fee: ${entry_fee:.2f} | "
+                f"SL: {fmt_price(stop_price)} | TP1: {fmt_price(tp1_price)} | TP2: {fmt_price(tp2_price)} | R: {R_pct*100:.2f}%")
             await send_telegram(
                 "ACQUISTO REALE\n" + sym + " @ $" + f"{actual_price:.4f}" +
                 "\nSize: $" + f"{size:.2f}" +
@@ -542,8 +548,8 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
     else:
         actual_price = price
         add_log(state, "buy", "ACQUISTO SIM",
-            f"{sym} @ ${actual_price:.4f} | Size: ${size:.0f} | Fee: ${entry_fee:.2f} | "
-            f"SL: ${stop_price:.4f} | TP1: ${tp1_price:.4f} | TP2: ${tp2_price:.4f} | R: {R_pct*100:.2f}%")
+            f"{sym} @ {fmt_price(actual_price)} | Size: ${size:.0f} | Fee: ${entry_fee:.2f} | "
+            f"SL: {fmt_price(stop_price)} | TP1: {fmt_price(tp1_price)} | TP2: {fmt_price(tp2_price)} | R: {R_pct*100:.2f}%")
 
     # In sim sottraiamo anche la fee di entrata dal capitale disponibile
     state["currentCapital"] -= size + (entry_fee if not is_real else 0)
@@ -672,10 +678,15 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
                 )
         except Exception as e:
             print(f"DB trade save error: {e}")
+    def _fp(p):
+        if p >= 1: return f"${p:.4f}"
+        if p >= 0.0001: return f"${p:.6f}"
+        return f"${p:.8f}"
+
     state["positions"] = [p for p in state["positions"] if p is not pos]
     mode = "REALE" if pos.get("realMode") else "SIM"
     add_log(state, "sell", f"{reason} {mode}",
-        f"{sym} @ ${cur:.4f} | {pnl:+.2f}$ ({pct:+.2f}%) | fee: ${exit_fee:.2f} | {dur:.0f} min")
+        f"{sym} @ {_fp(cur)} | {pnl:+.2f}$ ({pct:+.2f}%) | fee: ${exit_fee:.2f} | {dur:.0f} min")
     if pos.get("realMode"):
         esito = "PROFITTO" if pnl >= 0 else "PERDITA"
         msg = ("VENDITA REALE - " + esito + "\n" + sym + " @ $" + f"{cur:.4f}" +
@@ -774,12 +785,18 @@ async def scan_and_trade(state: dict, user_id: int = None):
         tradable_capital = state["currentCapital"] * capital_pct
 
     # Soglia minima: se il capitale tradabile è troppo basso, ferma
+    # In simulazione non fermiamo mai per saldo — il saldo sim è sempre quello che diciamo noi
     min_tradable = max(1.0, state["capital"] * alloc_pct * capital_pct * 0.1)
-    if tradable_capital < min_tradable:
+    if tradable_capital < min_tradable and cfg.get("realMode", False):
         state["running"] = False
         add_log(state, "info", "STOP AUTO",
-            f"Capitale tradabile insufficiente (${tradable_capital:.2f}) — sessione fermata")
-        await send_telegram(f"⛔ STOP AUTO: capitale disponibile ${tradable_capital:.2f} insufficiente")
+            f"Saldo USDC insufficiente (${tradable_capital:.2f}) — sessione fermata")
+        await send_telegram(f"⛔ STOP AUTO: saldo USDC ${tradable_capital:.2f} insufficiente")
+        return
+    elif tradable_capital < 1.0:
+        # Sim con capitale esaurito
+        add_log(state, "info", "INFO", f"Capitale sim esaurito (${tradable_capital:.2f}) — attesa recupero da posizioni aperte")
+        _update_pnl(state)
         return
 
     # Numero massimo di posizioni aperte contemporaneamente
@@ -840,6 +857,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
 
     candidates  = []
     ema_skipped = 0
+    block_count = {"trend1h": 0, "trend": 0, "pullback": 0, "bounce": 0, "volume": 0, "rsi": 0, "body": 0, "stop": 0}
 
     for d in universe_sorted:
         sym = d["symbol"]
@@ -848,6 +866,15 @@ async def scan_and_trade(state: dict, user_id: int = None):
                                     trend1h_filter, rsi_filter, rsi_min, rsi_max)
             if not signal["signal"]:
                 ema_skipped += 1
+                # Conta quale filtro ha bloccato
+                if not signal.get("trend1h_ok", True): block_count["trend1h"] += 1
+                elif not signal["trend_ok"]:            block_count["trend"] += 1
+                elif not signal["pullback_ok"]:         block_count["pullback"] += 1
+                elif not signal["bounce_ok"]:           block_count["bounce"] += 1
+                elif not signal["vol_ok"]:              block_count["volume"] += 1
+                elif not signal.get("rsi_ok", True):   block_count["rsi"] += 1
+                elif not signal.get("body_ok", True):  block_count["body"] += 1
+                elif not signal["stop_ok"]:             block_count["stop"] += 1
                 continue
             d["ema_reason"]  = signal["reason"]
             d["stop_price"]  = signal["stop_price"]
@@ -856,11 +883,15 @@ async def scan_and_trade(state: dict, user_id: int = None):
         if len(candidates) >= slots:
             break
 
+    # Trova il filtro che blocca di più
+    top_blocker = max(block_count, key=block_count.get) if ema_skipped > 0 else "-"
+    top_blocker_n = block_count.get(top_blocker, 0)
+
     top3 = [(d["symbol"], round(d.get("volume24h", 0) / 1e6, 0)) for d in universe_sorted[:3]]
     add_log(state, "info", "SCAN",
-        f"Universe: {len(prices_ok)} | Top3 vol (M$): {top3} | "
-        f"Candidati: {len(candidates)} | Saltati EMA: {ema_skipped} | "
-        f"Candele: {len(candle_data)} | BTC1h: {btc_1h:+.2f}% | Trade: {state['tradeCount']}/{max_trades or 'inf'}"
+        f"Universe: {len(universe_sorted)} | Candidati: {len(candidates)} | "
+        f"Saltati: {ema_skipped} | Blocco: {top_blocker}({top_blocker_n}) | "
+        f"RSI range: {rsi_min:.0f}-{rsi_max:.0f} | Candele: {len(candle_data)}"
     )
 
     for d in candidates:
@@ -1200,13 +1231,30 @@ async def get_status(user_id: int = Depends(get_current_user)):
 @app.get("/market")
 def get_market():
     items = []
+    # Usa i parametri della prima sessione attiva, altrimenti default
+    active_cfg = {}
+    for s in user_sessions.values():
+        if s.get("running"):
+            active_cfg = s.get("config", {})
+            break
+
+    pullback_tol   = active_cfg.get("pullbackTolerance", 0.015)
+    vol_mult       = active_cfg.get("volMultiplier", 1.2)
+    max_stop_pct   = active_cfg.get("maxStopPct", 0.025)
+    trend1h_filter = active_cfg.get("trend1hFilter", True)
+    rsi_filter     = active_cfg.get("rsiFilter", True)
+    rsi_min        = active_cfg.get("rsiMin", 35.0)
+    rsi_max        = active_cfg.get("rsiMax", 70.0)
+    min_r          = active_cfg.get("minR", 0.01)
+
     for s, d in market_data.items():
         if d["price"] <= 0:
             continue
         if s not in candle_data:
             continue
         item = {"symbol": s, **d}
-        sig = get_ema_signal(s, d["price"])
+        sig = get_ema_signal(s, d["price"], pullback_tol, vol_mult, max_stop_pct,
+                             trend1h_filter, rsi_filter, rsi_min, rsi_max, min_r)
         item["ema"] = {
             "trend":      sig["trend_ok"],
             "trend1h_ok": sig["trend1h_ok"],
