@@ -1137,6 +1137,15 @@ async def persist_sessions():
             print(f"Telegram loop error: {e}")
         await asyncio.sleep(10)
 
+async def telegram_loop():
+    """Loop separato per Telegram — non blocca il trading se Telegram è lento."""
+    while True:
+        try:
+            await poll_telegram()
+        except Exception as e:
+            print(f"Telegram loop error: {e}")
+        await asyncio.sleep(10)
+
 # ── startup ───────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
