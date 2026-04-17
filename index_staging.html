@@ -477,7 +477,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 <!-- Drawer Config -->
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
 <div class="drawer" id="configDrawer">
-  <div class="drawer-handle"></div>
+  <div class="drawer-handle" id="drawerHandle"></div>
   <div class="drawer-title">Nuova sessione</div>
   <div id="drawerConfigContent"></div>
 </div>
@@ -663,6 +663,13 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
       <input type="range" id="stopLoss" min="0.5" max="5" value="2.5" step="0.1"
         oninput="document.getElementById('slVal').textContent=parseFloat(this.value).toFixed(1)+'%'">
       <div class="field-hint">Scarta il trade se lo stop contestuale (ATR / low pullback) supera questa soglia</div>
+    </div>
+
+    <div class="field">
+      <div class="field-label">R minimo per trade <span id="minRVal" style="color:var(--blue);font-weight:700">1.0%</span></div>
+      <input type="range" id="minR" min="0.3" max="2" value="1.0" step="0.1"
+        oninput="document.getElementById('minRVal').textContent=parseFloat(this.value).toFixed(1)+'%'">
+      <div class="field-hint">Scarta trade dove il rischio è troppo piccolo — le fee mangerebbero il profitto</div>
     </div>
 
     <div class="field">
@@ -1448,7 +1455,7 @@ function startFluidTimer() {
 }
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-const CONFIG_IDS = ['capitalPct','allocPct','sessionDuration','stopLoss','pullbackTolerance','volMultiplier','minVolume','maxTrades','maxConsecutiveLosses','cooldown','tp2R','trailingPct','rsiMin','rsiMax'];
+const CONFIG_IDS = ['capitalPct','allocPct','sessionDuration','stopLoss','minR','pullbackTolerance','volMultiplier','minVolume','maxTrades','maxConsecutiveLosses','cooldown','tp2R','trailingPct','rsiMin','rsiMax'];
 
 function lockConfig() {
   CONFIG_IDS.forEach(id => { const el=document.getElementById(id); if(el) el.disabled=true; });
@@ -1475,6 +1482,7 @@ function resetConfigToDefaults() {
   document.getElementById('allocPct').value = 0; document.getElementById('allocVal').textContent = '0%';
   document.getElementById('sessionDuration').value = 0; document.getElementById('sessionVal').textContent = '0h';
   document.getElementById('stopLoss').value = 2.5; document.getElementById('slVal').textContent = '2.5%';
+  document.getElementById('minR').value = 1.0; document.getElementById('minRVal').textContent = '1.0%';
   document.getElementById('pullbackTolerance').value = 1.5; document.getElementById('pullbackVal').textContent = '1.5%';
   document.getElementById('volMultiplier').value = 1.2; document.getElementById('volMultVal').textContent = '1.2x';
   document.getElementById('minVolume').value = 0; document.getElementById('volVal').textContent = '$0M';
@@ -1504,6 +1512,7 @@ function restoreConfigFromStorage() {
   if (saved.allocPct) { const p=Math.round(saved.allocPct*100); document.getElementById('allocPct').value=p; document.getElementById('allocVal').textContent=p+'%'; }
   if (saved.sessionDuration) { document.getElementById('sessionDuration').value=saved.sessionDuration; document.getElementById('sessionVal').textContent=saved.sessionDuration+'h'; }
   if (saved.maxStopPct) { const sl=(saved.maxStopPct*100).toFixed(1); document.getElementById('stopLoss').value=sl; document.getElementById('slVal').textContent=sl+'%'; }
+  if (saved.minR !== undefined) { const mr=(saved.minR*100).toFixed(1); document.getElementById('minR').value=mr; document.getElementById('minRVal').textContent=mr+'%'; }
   if (saved.pullbackTolerance) { const pt=(saved.pullbackTolerance*100).toFixed(1); document.getElementById('pullbackTolerance').value=pt; document.getElementById('pullbackVal').textContent=pt+'%'; }
   if (saved.volMultiplier) { document.getElementById('volMultiplier').value=saved.volMultiplier; document.getElementById('volMultVal').textContent=parseFloat(saved.volMultiplier).toFixed(1)+'x'; }
   if (saved.minVolume) { const mv=saved.minVolume/1000000; document.getElementById('minVolume').value=mv; document.getElementById('volVal').textContent='$'+mv+'M'; }
@@ -1669,6 +1678,7 @@ async function startAgent() {
     allocPct:              allocVal / 100,
     sessionDuration:       parseInt(document.getElementById('sessionDuration').value),
     maxStopPct:            parseFloat(document.getElementById('stopLoss').value) / 100,
+    minR:                  parseFloat(document.getElementById('minR').value) / 100,
     pullbackTolerance:     parseFloat(document.getElementById('pullbackTolerance').value) / 100,
     volMultiplier:         parseFloat(document.getElementById('volMultiplier').value),
     minVolume:             parseFloat(document.getElementById('minVolume').value) * 1000000,
@@ -2579,6 +2589,48 @@ function closeDrawer() {
     configPage.style.display = '';
   }
 }
+
+// Swipe down per chiudere il drawer
+(function() {
+  let startY = 0, startScrollTop = 0, dragging = false;
+  const getDrawer = () => document.getElementById('configDrawer');
+
+  document.addEventListener('touchstart', e => {
+    const drawer = getDrawer();
+    if (!drawer || !drawer.classList.contains('open')) return;
+    // Swipe valido solo se il drawer è scrollato in cima
+    startY = e.touches[0].clientY;
+    startScrollTop = drawer.scrollTop;
+    dragging = true;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const drawer = getDrawer();
+    if (!drawer || !drawer.classList.contains('open')) return;
+    const dy = e.touches[0].clientY - startY;
+    // Chiudi solo se stiamo swipando verso il basso E il drawer è in cima
+    if (dy > 0 && drawer.scrollTop <= 0) {
+      drawer.style.transform = `translateY(${dy}px)`;
+      drawer.style.transition = 'none';
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  document.addEventListener('touchend', e => {
+    if (!dragging) return;
+    dragging = false;
+    const drawer = getDrawer();
+    if (!drawer) return;
+    const dy = (e.changedTouches[0]?.clientY || startY) - startY;
+    drawer.style.transition = '';
+    if (dy > 80 && drawer.scrollTop <= 0) {
+      closeDrawer();
+    } else {
+      drawer.style.transform = '';
+    }
+  }, { passive: true });
+})();
 
 
 
