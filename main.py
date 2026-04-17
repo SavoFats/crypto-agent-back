@@ -895,6 +895,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
         and d.get("volume24h", 0) >= min_vol
         and sym not in open_syms
         and sym in _coinbase_products
+        and sym in candle_data  # solo coin con candele disponibili
         and (state["cooldowns"].get(sym, 0) < datetime.now().timestamp() * 1000)
     ]
     universe_sorted = sorted(universe, key=lambda d: d.get("volume24h", 0), reverse=True)
