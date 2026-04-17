@@ -225,7 +225,6 @@ async def fetch_candles_for_symbol(sym: str, client: httpx.AsyncClient) -> dict 
             "ema20_1h":         calc_ema(closes1h, 20),
             "ema50_1h":         calc_ema(closes1h, 50),
             "last_close_5m":    closes5[-1],
-            "close_1h_ago":     closes1h[-2],  # close della candela 1h precedente = 1h fa esatto
             "atr_5m":           atr_5m,
             "pullback_low_5m":  pullback_low_5m,
             "vol_avg_20":       vol_avg_20,
@@ -401,8 +400,12 @@ async def fetch_prices():
             usd_syms[p["id"]] = sym
 
         async with httpx.AsyncClient(timeout=15) as client:
-            r2 = await client.get(f"{BINANCE_BASE}/api/v3/ticker/24hr")
-            tickers = r2.json()
+            r2, r1h = await asyncio.gather(
+                client.get(f"{BINANCE_BASE}/api/v3/ticker/24hr"),
+                client.get(f"{BINANCE_BASE}/api/v3/ticker", params={"windowSize": "1h"}),
+            )
+            tickers    = r2.json()
+            tickers_1h = r1h.json() if r1h.status_code == 200 else []
 
         binance_map = {}
         for t in tickers:
@@ -411,6 +414,18 @@ async def fetch_prices():
                 s = pair[:-4]
                 if s in usd_syms.values():
                     binance_map[s] = t
+
+        # Mappa variazione 1h rolling da Binance
+        binance_1h = {}
+        for t in (tickers_1h if isinstance(tickers_1h, list) else []):
+            pair = t.get("symbol","")
+            if pair.endswith("USDT"):
+                s = pair[:-4]
+                if s in usd_syms.values():
+                    try:
+                        binance_1h[s] = float(t["priceChangePercent"])
+                    except:
+                        pass
 
         for product_id, sym in usd_syms.items():
             t = binance_map.get(sym)
@@ -433,10 +448,8 @@ async def fetch_prices():
                     "volume24h": 0.0, "icon": sym[0]
                 }
 
-            # change1h: usa close_1h_ago dalle candele Binance — dato preciso
-            # Se le candele non sono ancora disponibili mostra 0.0 (nessuna stima)
-            cd = candle_data.get(sym)
-            change1h = (price - cd["close_1h_ago"]) / cd["close_1h_ago"] * 100 if (cd and cd.get("close_1h_ago", 0) > 0) else 0.0
+            # change1h: direttamente da Binance ticker 1h rolling (dato preciso al minuto)
+            change1h = binance_1h.get(sym, 0.0)
 
             market_data[sym]["price"]     = price
             market_data[sym]["change1h"]  = change1h
