@@ -264,7 +264,7 @@ async def fetch_candles_for_symbol(sym: str, client: httpx.AsyncClient) -> dict 
             "ema20_1h":         calc_ema(closes1h, 20),
             "ema50_1h":         calc_ema(closes1h, 50),
             "last_close_5m":    closes5[-1],
-            "close_1h_ago":     closes1h[-2] if len(closes1h) >= 2 else 0.0,
+            "close_1h_ago":     closes5[-13] if len(closes5) >= 13 else (closes1h[-2] if len(closes1h) >= 2 else 0.0),
             "atr_5m":           atr_5m,
             "pullback_low_5m":  pullback_low_5m,
             "vol_avg_20":       vol_avg_20,
@@ -490,19 +490,17 @@ async def fetch_prices():
             else:
                 change1h = market_data[sym].get("change1h", 0.0)
 
-            async with _market_data_lock:
-                market_data[sym]["price"]     = price
-                market_data[sym]["change1h"]  = change1h
-                market_data[sym]["change24h"] = change24h
-                market_data[sym]["volume24h"] = vol_usd
+            market_data[sym]["price"]     = price
+            market_data[sym]["change1h"]  = change1h
+            market_data[sym]["change24h"] = change24h
+            market_data[sym]["volume24h"] = vol_usd
 
-            async with _market_data_lock:
-                for state in user_sessions.values():
-                    for pos in state["positions"]:
-                        if pos["symbol"] == sym:
-                            pos["currentPrice"] = price
-                            if price > pos["highPrice"]:
-                                pos["highPrice"] = price
+            for state in user_sessions.values():
+                for pos in state["positions"]:
+                    if pos["symbol"] == sym:
+                        pos["currentPrice"] = price
+                        if price > pos["highPrice"]:
+                            pos["highPrice"] = price
 
     except Exception as e:
         print(f"Fetch error: {e}")
@@ -938,8 +936,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
     rsi_max       = cfg.get("rsiMax", 70.0)
     min_r         = cfg.get("minR", 0.01)
 
-    async with _market_data_lock:
-        universe = [
+    universe = [
             {**d, "symbol": sym}
             for sym, d in market_data.items()
             if d["price"] > 0
