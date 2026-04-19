@@ -451,6 +451,28 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
   </div>
 </div>
 
+<!-- Modal Revolut X config -->
+<div class="modal-overlay" id="revxModal">
+  <div class="modal-card" style="max-width:400px">
+    <div class="modal-title">Revolut X API</div>
+    <div class="modal-body" style="text-align:left">
+      <div class="field" style="margin-bottom:12px">
+        <div class="field-label">API Key ID</div>
+        <input type="text" id="revxKeyId" placeholder="2LDsmJVAh..." style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;color:var(--text);font-size:14px;font-family:var(--sans);outline:none;box-sizing:border-box">
+      </div>
+      <div class="field">
+        <div class="field-label">Chiave privata (private_key.pem)</div>
+        <textarea id="revxPrivateKey" rows="6" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;color:var(--text);font-size:11px;font-family:monospace;outline:none;box-sizing:border-box;resize:vertical"></textarea>
+        <div class="field-hint">Incolla il contenuto completo del file private_key.pem</div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="document.getElementById('revxModal').classList.remove('open')">Annulla</button>
+      <button class="modal-btn confirm" onclick="saveRevxKeys()">Salva</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal avviso sessione attiva -->
 <div class="modal-overlay" id="sessionActiveModal">
   <div class="modal-card">
@@ -1188,6 +1210,40 @@ async function loadUserProfile() {
     renderMarketStars();
   } catch(e) {
     applyAvatar(localStorage.getItem('ca_avatar'));
+  }
+}
+
+function showRevxConfig() {
+  closeProfileMenu();
+  document.getElementById('revxModal').classList.add('open');
+}
+
+async function saveRevxKeys() {
+  const keyId = document.getElementById('revxKeyId').value.trim();
+  const privateKey = document.getElementById('revxPrivateKey').value.trim();
+  if (!keyId || !privateKey) {
+    alert('Inserisci sia il Key ID che la chiave privata');
+    return;
+  }
+  try {
+    const r = await fetch(API + '/auth/save_revx_keys', {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ key_id: keyId, private_key: privateKey })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('revxModal').classList.remove('open');
+      // Test connessione
+      const tr = await fetch(API + '/test_revx', { headers: authHeaders() });
+      const td = await tr.json();
+      if (td.ok) {
+        alert('Revolut X configurato. Saldi: ' + td.balances.map(b => b.currency + ' ' + parseFloat(b.available).toFixed(4)).join(', '));
+      } else {
+        alert('Chiavi salvate ma test fallito: ' + (td.error || 'errore sconosciuto'));
+      }
+    }
+  } catch(e) {
+    alert('Errore: ' + e.message);
   }
 }
 
