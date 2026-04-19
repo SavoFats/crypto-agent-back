@@ -1771,12 +1771,17 @@ async def test_revx(user_id: int = Depends(get_current_user)):
     private_key = decrypt_key(row["revx_private_key"])
     try:
         result = await revx_request("GET", "/api/1.0/balances", key_id=key_id, private_key=private_key)
+        # Revolut X può restituire lista diretta o dict con "balances"
+        if isinstance(result, list):
+            balances_raw = result
+        else:
+            balances_raw = result.get("balances", [])
         balances = [
-            {"currency": b["currency"], "available": b["available"]}
-            for b in result.get("balances", [])
+            {"currency": b.get("currency", ""), "available": b.get("available", "0")}
+            for b in balances_raw
             if float(b.get("available", 0) or 0) > 0
         ]
-        return {"ok": True, "balances": balances}
+        return {"ok": True, "balances": balances, "raw": result}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
