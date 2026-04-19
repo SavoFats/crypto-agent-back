@@ -140,6 +140,36 @@ def make_coinbase_jwt(method: str, path: str, cb_key: str, cb_secret: str) -> st
                        headers={"kid": cb_key, "nonce": hashlib.sha256(os.urandom(16)).hexdigest()[:16]})
     return token
 
+def make_revx_signature(api_key_id: str, private_key_pem: str, method: str, path: str, query: str = "", body: str = "") -> dict:
+    """Genera gli header di autenticazione per Revolut X (Ed25519)."""
+    import base64
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    timestamp = str(int(time.time() * 1000))
+    message = f"{timestamp}{method}{path}{query}{body}".encode('utf-8')
+    private_key = load_pem_private_key(private_key_pem.encode(), password=None)
+    signature = base64.b64encode(private_key.sign(message)).decode()
+    return {
+        "X-Revx-API-Key": api_key_id,
+        "X-Revx-Timestamp": timestamp,
+        "X-Revx-Signature": signature,
+        "Content-Type": "application/json",
+    }
+
+REVX_BASE = "https://revx.revolut.com"
+
+async def revx_request(method: str, path: str, body: dict = None,
+                        key_id: str = None, private_key: str = None) -> dict:
+    """Esegue una richiesta autenticata a Revolut X."""
+    body_str = json.dumps(body, separators=(',', ':')) if body else ""
+    headers = make_revx_signature(key_id, private_key, method, path, "", body_str)
+    async with httpx.AsyncClient(timeout=30) as client:
+        if method == "GET":
+            r = await client.get(f"{REVX_BASE}{path}", headers=headers)
+        else:
+            r = await client.post(f"{REVX_BASE}{path}", headers=headers, content=body_str)
+    return r.json()
+
 async def coinbase_request(method: str, path: str, body: dict = None,
                            cb_key: str = None, cb_secret: str = None) -> dict:
     api_key    = cb_key    or _ENV_CB_KEY
@@ -640,11 +670,22 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
                 "order_configuration": {"market_market_ioc": {"quote_size": str(round(size, 2))}}
             }
             add_log(state, "info", "DEBUG", f"Ordine {sym}: product_id={product_id} size=${size:.2f}")
-            print(f"[ORDER] {sym} body={body}")
             result = await coinbase_request("POST", "/api/v3/brokerage/orders", body, cb_key=cb_key, cb_secret=cb_secret)
-            print(f"[ORDER RESULT] {sym}: {result}")
+            # Se fallisce con USDC prova USD e viceversa
             if result.get("success") != True:
-                # Gestisci sia struttura piatta che annidata
+                err_str = str(result).lower()
+                if "not available" in err_str or "invalid_argument" in err_str:
+                    alt_id = product_id.replace("-USDC", "-USD") if "-USDC" in product_id else product_id.replace("-USD", "-USDC")
+                    if alt_id != product_id:
+                        add_log(state, "info", "RETRY", f"{sym}: provo {alt_id}")
+                        body["product_id"] = alt_id
+                        result = await coinbase_request("POST", "/api/v3/brokerage/orders", body, cb_key=cb_key, cb_secret=cb_secret)
+                        if result.get("success") == True:
+                            product_id = alt_id
+                            # Aggiorna il product_id in cache per i prossimi ordini
+                            if sym in _coinbase_products:
+                                _coinbase_products[sym]["product_id"] = alt_id
+            if result.get("success") != True:
                 err = result.get("error_response") or result
                 err_msg = err.get("message") or err.get("error_details") or str(result)
                 err_str = str(result).lower()
@@ -1200,6 +1241,8 @@ async def startup():
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS sim_mode BOOLEAN DEFAULT TRUE;
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_b64 TEXT DEFAULT '';
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT DEFAULT '';
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS revx_key_id TEXT DEFAULT '';
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS revx_private_key TEXT DEFAULT '';
                     CREATE TABLE IF NOT EXISTS trades_history (
                         id SERIAL PRIMARY KEY,
                         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -1393,7 +1436,7 @@ async def get_me(user_id: int = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Database non disponibile")
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT username, display_name, cb_key, avatar_b64, sim_mode FROM users WHERE id = $1", user_id
+            "SELECT username, display_name, cb_key, avatar_b64, sim_mode, revx_key_id FROM users WHERE id = $1", user_id
         )
     has_keys = bool(row["cb_key"])
     sim = row["sim_mode"] if row["sim_mode"] is not None else True
@@ -1405,7 +1448,8 @@ async def get_me(user_id: int = Depends(get_current_user)):
         "username": dname,
         "has_api_keys": has_keys,
         "avatar_b64": row["avatar_b64"] or "",
-        "sim_mode": sim
+        "sim_mode": sim,
+        "has_revx_keys": bool(row.get("revx_key_id") or ""),
     }
 
 class SimModeRequest(BaseModel):
@@ -1699,6 +1743,42 @@ async def candles_status(user_id: int = Depends(get_current_user)):
         "next_update_in_sec": max(0, CANDLE_UPDATE_INTERVAL - (time.time() - _candles_last_update)) if _candles_last_update else 0,
         "sample_signals": sample,
     }
+
+class RevxKeysRequest(BaseModel):
+    key_id: str
+    private_key: str
+
+@app.post("/auth/save_revx_keys")
+async def save_revx_keys(req: RevxKeysRequest, user_id: int = Depends(get_current_user)):
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="DB non disponibile")
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET revx_key_id = $1, revx_private_key = $2 WHERE id = $3",
+            encrypt_key(req.key_id), encrypt_key(req.private_key), user_id
+        )
+    return {"ok": True}
+
+@app.get("/test_revx")
+async def test_revx(user_id: int = Depends(get_current_user)):
+    if not db_pool:
+        return {"ok": False, "error": "DB non disponibile"}
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT revx_key_id, revx_private_key FROM users WHERE id = $1", user_id)
+    if not row or not row["revx_key_id"]:
+        return {"ok": False, "error": "Chiavi Revolut X non configurate"}
+    key_id = decrypt_key(row["revx_key_id"])
+    private_key = decrypt_key(row["revx_private_key"])
+    try:
+        result = await revx_request("GET", "/api/1.0/balances", key_id=key_id, private_key=private_key)
+        balances = [
+            {"currency": b["currency"], "available": b["available"]}
+            for b in result.get("balances", [])
+            if float(b.get("available", 0) or 0) > 0
+        ]
+        return {"ok": True, "balances": balances}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 @app.get("/test_coinbase")
 async def test_coinbase(user_id: int = Depends(get_current_user)):
