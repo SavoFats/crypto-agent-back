@@ -312,6 +312,10 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 .fdd-item:hover, .fdd-item:active { background:var(--surface2); }
 .fdd-item.selected { color:var(--blue); }
 
+/* Grafico mini coin nelle posizioni */
+.pos-chart-wrap { margin-top:10px; height:60px; position:relative; }
+.pos-chart-canvas { width:100%; height:60px; display:block; }
+
 /* Mini-log agente nel monitor */
 .agent-msg { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
 .agent-msg:last-child { border-bottom:none; }
@@ -781,11 +785,11 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
         <div class="kpi-sub" id="kpiWR">Win rate: --</div>
       </div>
     </div>
-    <!-- Mini-log agente -->
+    <!-- Log agente scrollabile -->
     <div id="agentActivityWrap" style="display:none;margin-bottom:12px">
       <div class="card" style="padding:14px 16px">
         <div class="card-label" style="margin-bottom:10px">Attivita agente</div>
-        <div id="agentActivityList"></div>
+        <div id="agentActivityList" style="max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
       </div>
     </div>
 
@@ -1894,11 +1898,11 @@ function render() {
   if (actWrap) {
     if (logs.length > 0 && S.running) {
       actWrap.style.display = 'block';
-      actList.innerHTML = logs.slice(0, 4).map(l => {
-        const time = l.ts ? new Date(l.ts).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}) : (l.time || '');
+      actList.innerHTML = logs.map(l => {
+        const time = l.ts ? new Date(l.ts).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit', second:'2-digit'}) : (l.time || '');
         return `<div class="agent-msg">
           <div class="agent-msg-dot ${l.type}"></div>
-          <div class="agent-msg-text">${l.desc}</div>
+          <div class="agent-msg-text"><strong>${l.label}</strong> ${l.desc}</div>
           <div class="agent-msg-time">${time}</div>
         </div>`;
       }).join('');
@@ -1932,19 +1936,89 @@ function renderHomeSession() {
     const color = isPos ? 'var(--green)' : 'var(--red)';
     const logo = getLogo(p.symbol);
     const img = logo ? `<img src="${logo}" style="width:30px;height:30px;border-radius:50%" onerror="this.style.display='none'">` : `<div style="width:30px;height:30px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text2)">${p.symbol[0]}</div>`;
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:10px">${img}
-        <div>
-          <div style="font-size:14px;font-weight:700">${p.symbol}</div>
-          <div style="font-size:11px;color:var(--text3)">$${p.currentPrice.toFixed(4)}</div>
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:10px">${img}
+          <div>
+            <div style="font-size:14px;font-weight:700">${p.symbol}</div>
+            <div style="font-size:11px;color:var(--text3)">$${p.currentPrice.toFixed(4)}</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:15px;font-weight:700;color:${color}">${isPos?'+':''}$${pnl.toFixed(2)}</div>
+          <div style="font-size:11px;font-weight:600;color:${color}">${isPos?'+':''}${pct.toFixed(2)}%</div>
         </div>
       </div>
-      <div style="text-align:right">
-        <div style="font-size:15px;font-weight:700;color:${color}">${isPos?'+':''}$${pnl.toFixed(2)}</div>
-        <div style="font-size:11px;font-weight:600;color:${color}">${isPos?'+':''}${pct.toFixed(2)}%</div>
-      </div>
+      <div class="pos-chart-wrap"><canvas class="pos-chart-canvas" id="home-chart-${p.symbol}"></canvas></div>
     </div>`;
   }).join('');
+  // Carica grafici in background
+  pos.forEach(p => {
+    fetchMiniChart(p.symbol).then(closes => {
+      const canvas = document.getElementById('home-chart-' + p.symbol);
+      if (canvas && closes) drawMiniChart(canvas, closes, p.entryPrice);
+    });
+  });
+}
+
+// Cache grafici mini per non ricaricare ad ogni render
+const _miniChartCache = {};
+
+async function fetchMiniChart(sym) {
+  if (_miniChartCache[sym] && Date.now() - _miniChartCache[sym].ts < 60000) {
+    return _miniChartCache[sym].data;
+  }
+  try {
+    const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}USDT&interval=5m&limit=48`);
+    const klines = await r.json();
+    if (!Array.isArray(klines)) return null;
+    const closes = klines.map(k => parseFloat(k[4]));
+    _miniChartCache[sym] = { data: closes, ts: Date.now() };
+    return closes;
+  } catch(e) { return null; }
+}
+
+function drawMiniChart(canvas, closes, entryPrice) {
+  if (!canvas || !closes || closes.length < 2) return;
+  const w = canvas.offsetWidth || 200;
+  const h = 60;
+  canvas.width = w * window.devicePixelRatio;
+  canvas.height = h * window.devicePixelRatio;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const min = Math.min(...closes) * 0.9995;
+  const max = Math.max(...closes) * 1.0005;
+  const range = max - min || 1;
+  const px = (v) => h - ((v - min) / range) * h;
+  const lastClose = closes[closes.length - 1];
+  const isUp = lastClose >= entryPrice;
+  const color = isUp ? '#16c784' : '#ea3943';
+  // Linea entry price
+  const entryY = px(entryPrice);
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = 'rgba(150,150,150,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, entryY); ctx.lineTo(w, entryY); ctx.stroke();
+  ctx.setLineDash([]);
+  // Gradiente riempimento
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, color + '33');
+  grad.addColorStop(1, color + '00');
+  const step = w / (closes.length - 1);
+  ctx.beginPath();
+  ctx.moveTo(0, px(closes[0]));
+  closes.forEach((v, i) => ctx.lineTo(i * step, px(v)));
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+  // Linea prezzo
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.moveTo(0, px(closes[0]));
+  closes.forEach((v, i) => ctx.lineTo(i * step, px(v)));
+  ctx.stroke();
 }
 
 function renderPositions() {
@@ -1994,9 +2068,17 @@ function renderPositions() {
         <div class="pos-progress-labels"><span>SL</span><span>${pct.toFixed(2)}%</span><span>${tp1Hit?'TP2':'TP1'}</span></div>
         <div class="pos-bar"><div class="pos-bar-fill" style="width:${progress}%;background:${barColor}"></div></div>
       </div>
+      <div class="pos-chart-wrap"><canvas class="pos-chart-canvas" id="chart-${p.symbol}"></canvas></div>
       <button class="close-btn" onclick="closePosition('${p.symbol}')">Chiudi posizione</button>
     </div>`;
   }).join('');
+  // Carica grafici mini in background
+  pos.forEach(p => {
+    fetchMiniChart(p.symbol).then(closes => {
+      const canvas = document.getElementById('chart-' + p.symbol);
+      if (canvas && closes) drawMiniChart(canvas, closes, p.entryPrice);
+    });
+  });
 }
 
 async function closePosition(symbol) {
