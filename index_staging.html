@@ -481,7 +481,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 <div class="modal-overlay" id="sessionActiveModal">
   <div class="modal-card">
     <div class="modal-title">Sessione in corso</div>
-    <div class="modal-body">Non puoi cambiare modalità mentre una sessione è attiva. Interrompi prima la sessione dal Monitor, poi torna qui per effettuare il cambio.</div>
+    <div class="modal-body">Non puoi modificare la configurazione mentre una sessione è attiva. Interrompi prima la sessione dal Monitor, poi torna qui per effettuare le modifiche.</div>
     <div class="modal-actions" style="grid-template-columns:1fr">
       <button class="modal-btn cancel" style="text-align:center" onclick="document.getElementById('sessionActiveModal').classList.remove('open')">Chiudi</button>
     </div>
@@ -984,6 +984,11 @@ function closeProfileOnOutside(e) {
   }
 }
 function openApiKeysFromMenu() {
+  if (S.running) {
+    document.getElementById('profileMenu').classList.remove('open');
+    document.getElementById('sessionActiveModal').classList.add('open');
+    return;
+  }
   document.getElementById('profileMenu').classList.remove('open');
   showApiKeys();
   document.getElementById('authScreen').style.display = 'flex';
@@ -1220,6 +1225,11 @@ async function loadUserProfile() {
 }
 
 function showRevxConfig() {
+  if (S.running) {
+    document.getElementById('profileMenu').classList.remove('open');
+    document.getElementById('sessionActiveModal').classList.add('open');
+    return;
+  }
   document.getElementById('profileMenu').classList.remove('open');
   document.getElementById('revxModal').classList.add('open');
 }
@@ -2580,7 +2590,7 @@ async function loadHomeBalance() {
   const tagEl = document.getElementById('homeModeTag');
   if (!valEl) return;
 
-  const isReal = _hasApiKeys && !_simMode;
+  const isReal = (_hasApiKeys || _hasRevxKeys) && !_simMode;
 
   if (tagEl) {
     tagEl.textContent = isReal ? 'Modalità Reale' : 'Simulazione';
@@ -2589,28 +2599,48 @@ async function loadHomeBalance() {
 
   if (isReal) {
     valEl.textContent = '...';
-    subEl.textContent = 'Recupero saldo Coinbase';
-    try {
-      const r = await fetch(API + '/test_coinbase', { headers: authHeaders() });
-      const d = await r.json();
-      if (d.ok) {
-        const usdc = d.balances.find(b => b.currency === 'USDC/USD' || b.currency === 'USDC' || b.currency === 'USD');
-        const bal = d.usdc_tradable || (usdc ? parseFloat(usdc.available) : 0);
-        valEl.textContent = '$' + bal.toFixed(2);
-        subEl.textContent = 'USDC disponibili su Coinbase';
-        const tbd = document.getElementById('totalBalanceDisplay');
-        if (tbd) { tbd.textContent = '$' + bal.toFixed(2) + ' USDC'; tbd.style.color = 'var(--green)'; }
-        // Salva il saldo totale come riferimento per lo slider capitalPct
-        const cap = document.getElementById('capital');
-        if (cap) cap.dataset.total = bal;
-        updateCapitalPct();
-      } else {
-        valEl.textContent = '--';
-        subEl.textContent = 'Errore Coinbase';
-      }
-    } catch(e) {
-      valEl.textContent = '--';
-      subEl.textContent = 'Connessione fallita';
+    if (_hasRevxKeys) {
+      // Revolut X ha la precedenza
+      subEl.textContent = 'Recupero saldo Revolut X';
+      try {
+        const r = await fetch(API + '/test_revx', { headers: authHeaders() });
+        const d = await r.json();
+        if (d.ok && d.balances && d.balances.length > 0) {
+          const eur = d.balances.find(b => b.currency === 'EUR');
+          const usd = d.balances.find(b => b.currency === 'USD' || b.currency === 'USDC');
+          const best = eur || usd || d.balances[0];
+          const bal = parseFloat(best.available);
+          const sym = best.currency;
+          valEl.textContent = (sym === 'EUR' ? '€' : '$') + bal.toFixed(2);
+          subEl.textContent = sym + ' disponibili su Revolut X';
+          const tbd = document.getElementById('totalBalanceDisplay');
+          if (tbd) { tbd.textContent = bal.toFixed(2) + ' ' + sym + ' (Revolut X)'; tbd.style.color = 'var(--green)'; }
+          const cap = document.getElementById('capital');
+          if (cap) cap.dataset.total = bal;
+          updateCapitalPct();
+        } else {
+          valEl.textContent = '--'; subEl.textContent = 'Errore Revolut X';
+        }
+      } catch(e) { valEl.textContent = '--'; subEl.textContent = 'Connessione fallita'; }
+    } else {
+      subEl.textContent = 'Recupero saldo Coinbase';
+      try {
+        const r = await fetch(API + '/test_coinbase', { headers: authHeaders() });
+        const d = await r.json();
+        if (d.ok) {
+          const usdc = d.balances.find(b => b.currency === 'USDC/USD' || b.currency === 'USDC' || b.currency === 'USD');
+          const bal = d.usdc_tradable || (usdc ? parseFloat(usdc.available) : 0);
+          valEl.textContent = '$' + bal.toFixed(2);
+          subEl.textContent = 'USDC disponibili su Coinbase';
+          const tbd = document.getElementById('totalBalanceDisplay');
+          if (tbd) { tbd.textContent = '$' + bal.toFixed(2) + ' USDC'; tbd.style.color = 'var(--green)'; }
+          const cap = document.getElementById('capital');
+          if (cap) cap.dataset.total = bal;
+          updateCapitalPct();
+        } else {
+          valEl.textContent = '--'; subEl.textContent = 'Errore Coinbase';
+        }
+      } catch(e) { valEl.textContent = '--'; subEl.textContent = 'Connessione fallita'; }
     }
   } else {
     valEl.textContent = '$1,000';
