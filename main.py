@@ -734,32 +734,35 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
     if pos.get("realMode", False):
         cb_key    = state.get("cb_key", "") or _ENV_CB_KEY
         cb_secret = state.get("cb_secret", "") or _ENV_CB_SECRET
+        sell_ok = False
         try:
-            # Usa la quantità tracciata all'acquisto — NON il saldo totale del conto
-            # Evita di vendere crypto pre-esistente non comprata dall'agente
             qty_purchased = pos.get("qty_purchased", 0.0)
             if qty_purchased <= 0:
                 add_log(state, "info", "ERRORE", f"qty_purchased non disponibile per {sym} — vendita annullata")
-            else:
-                qty_to_sell = round(qty_purchased * 0.5, 8) if partial else round(qty_purchased, 8)
-                product_id  = pos.get("product_id", f"{sym}-USDC")
-                body = {
-                    "client_order_id": f"ca-exit-{sym}-{int(time.time())}",
-                    "product_id": product_id, "side": "SELL",
-                    "order_configuration": {"market_market_ioc": {"base_size": str(qty_to_sell)}}
-                }
-                result = await coinbase_request("POST", "/api/v3/brokerage/orders", body, cb_key=cb_key, cb_secret=cb_secret)
-                if result.get("success") != True:
-                    add_log(state, "info", "ERRORE", f"Vendita {sym} fallita: {result.get('error_response', {}).get('message', str(result))}")
-                else:
-                    filled = result.get("success_response", {})
-                    cur = float(filled.get("average_filled_price", cur)) or cur
-                    add_log(state, "info", "VENDUTO", f"{sym} qty: {qty_to_sell:.6f} @ {_fp(cur)}")
-                    # Aggiorna qty_purchased rimanente dopo vendita parziale
-                    if partial:
-                        pos["qty_purchased"] = qty_purchased - qty_to_sell
+                return  # NON rimuovere la posizione se non sappiamo quante crypto vendere
+            qty_to_sell = round(qty_purchased * 0.5, 8) if partial else round(qty_purchased, 8)
+            product_id  = pos.get("product_id", f"{sym}-USDC")
+            body = {
+                "client_order_id": f"ca-exit-{sym}-{int(time.time())}",
+                "product_id": product_id, "side": "SELL",
+                "order_configuration": {"market_market_ioc": {"base_size": str(qty_to_sell)}}
+            }
+            result = await coinbase_request("POST", "/api/v3/brokerage/orders", body, cb_key=cb_key, cb_secret=cb_secret)
+            if result.get("success") != True:
+                err = result.get("error_response") or result
+                err_msg = err.get("message") or err.get("error_details") or str(result)
+                add_log(state, "info", "ERRORE", f"Vendita {sym} fallita [{product_id}]: {err_msg}")
+                await send_telegram(f"ERRORE VENDITA {sym}: {err_msg[:100]}")
+                return  # NON rimuovere la posizione se la vendita è fallita
+            filled = result.get("success_response", {})
+            cur = float(filled.get("average_filled_price", cur)) or cur
+            add_log(state, "info", "VENDUTO", f"{sym} qty: {qty_to_sell:.6f} @ {_fp(cur)}")
+            if partial:
+                pos["qty_purchased"] = qty_purchased - qty_to_sell
+            sell_ok = True
         except Exception as e:
             add_log(state, "info", "ERRORE", f"Coinbase exit error: {sanitize_error(e, cb_key, cb_secret)}")
+            return  # NON rimuovere la posizione in caso di eccezione
 
     pnl = (cur - pos["entryPrice"]) / pos["entryPrice"] * close_size
     pct = (cur - pos["entryPrice"]) / pos["entryPrice"] * 100
