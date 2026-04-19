@@ -580,7 +580,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <div class="field">
       <div class="field-label">Saldo totale disponibile</div>
       <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;font-size:16px;font-weight:700;color:var(--text3)" id="totalBalanceDisplay">--</div>
-      <div class="field-hint">Aggiornato in tempo reale da Coinbase / simulato</div>
+      <div class="field-hint" id="balanceSourceHint">Aggiornato in tempo reale</div>
     </div>
     <!-- elemento nascosto per compatibilità JS (dataset.total) -->
     <input type="hidden" id="capital">
@@ -1633,12 +1633,23 @@ function restoreConfigFromStorage() {
   updateAlloc();
 }
 
+function getCurrSym() {
+  // Restituisce il simbolo valuta corretto basato sull'exchange attivo
+  return _hasRevxKeys && !_simMode ? '€' : '$';
+}
+
+function getFeePct() {
+  // Fee per lato: Revolut X 0.09% taker, Coinbase 0.6%
+  return _hasRevxKeys && !_simMode ? 0.0009 : 0.006;
+}
+
 function updateCapitalPct() {
   const pct = parseInt(document.getElementById('capitalPct').value);
   document.getElementById('capitalPctVal').textContent = pct + '%';
   const total = parseFloat(document.getElementById('capital').dataset.total || 0);
-  const dollars = total > 0 ? (total * pct / 100) : 0;
-  document.getElementById('capitalDisplay').textContent = dollars > 0 ? '$' + dollars.toFixed(2) : '--';
+  const amount = total > 0 ? (total * pct / 100) : 0;
+  const sym = getCurrSym();
+  document.getElementById('capitalDisplay').textContent = amount > 0 ? sym + amount.toFixed(2) : '--';
   updateAlloc();
 }
 
@@ -1651,18 +1662,21 @@ function updateAlloc() {
   const total = parseFloat(document.getElementById('capital').dataset.total || 0);
   const tradable = total > 0 ? (total * pct / 100) : 0;
   const sizePerTrade = tradable * v / 100;
-  const slots = max; // slot massimi contemporanei
-  const feeReserve = sizePerTrade * 0.012 * slots; // 0.6% entrata + 0.6% uscita * n posizioni
+  const slots = max;
+  const feePct = getFeePct();
+  const feeReserve = sizePerTrade * feePct * 2 * slots; // entrata + uscita * n posizioni
   const netCapital = tradable - feeReserve;
   const netPerTrade = netCapital * v / 100;
+  const sym = getCurrSym();
+  const exchangeName = (_hasRevxKeys && !_simMode) ? 'Revolut X (0.09%)' : 'Coinbase (0.6%)';
 
   const hint = document.getElementById('allocHint');
   if (tradable > 0) {
     hint.innerHTML =
-      'Max ' + max + ' posizioni · <strong>$' + netPerTrade.toFixed(2) + '</strong> per trade' +
-      '<br><span style="color:var(--text3);font-size:10px">Capitale: $' + tradable.toFixed(2) +
-      ' · Fee stimate: <span style="color:var(--red)">−$' + feeReserve.toFixed(2) + '</span>' +
-      ' · Netto: $' + netCapital.toFixed(2) + '</span>';
+      'Max ' + max + ' posizioni · <strong>' + sym + netPerTrade.toFixed(2) + '</strong> per trade' +
+      '<br><span style="color:var(--text3);font-size:10px">Capitale: ' + sym + tradable.toFixed(2) +
+      ' · Fee ' + exchangeName + ': <span style="color:var(--red)">−' + sym + feeReserve.toFixed(2) + '</span>' +
+      ' · Netto: ' + sym + netCapital.toFixed(2) + '</span>';
   } else {
     hint.innerHTML = 'Max ' + max + ' posizioni · configura il capitale per vedere le fee';
   }
@@ -1736,7 +1750,7 @@ async function setMode(real) {
         document.getElementById('totalBalanceDisplay').textContent = '$' + bal.toFixed(2) + ' USDC disponibili';
         document.getElementById('totalBalanceDisplay').style.color = 'var(--green)';
         capitalInput.value = suggested; capitalInput.dataset.total = bal;
-        document.getElementById('capitalDisplay').textContent = '$' + suggested;
+        document.getElementById('capitalDisplay').textContent = getCurrSym() + suggested;
         hint.textContent = 'Saldo USDC: $' + bal.toFixed(2) + ' — ordini reali su Coinbase';
         hint.style.color = 'var(--red)'; updateAlloc();
       } else {
@@ -1747,7 +1761,7 @@ async function setMode(real) {
     realBtn.classList.remove('active-real'); simBtn.classList.add('active-sim');
     hint.textContent = 'Nessun ordine reale verra eseguito'; hint.style.color = '';
     capitalInput.disabled = false; capitalInput.value = 1000; capitalInput.dataset.total = 0;
-    document.getElementById('capitalDisplay').textContent = '$1,000';
+    document.getElementById('capitalDisplay').textContent = '$1,000'; // simulazione
     document.getElementById('totalBalanceDisplay').textContent = 'Modalita simulazione';
     document.getElementById('totalBalanceDisplay').style.color = '';
     updateAlloc();
