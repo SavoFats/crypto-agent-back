@@ -544,44 +544,42 @@ def unrealized_pnl(state: dict) -> float:
 async def get_coinbase_usdc_balance(cb_key: str, cb_secret: str) -> float:
     """
     Legge il saldo USDC/USD disponibile su Coinbase Advanced Trade.
-    Prova prima /portfolios (saldo aggregato), poi /accounts come fallback.
+    Usa /portfolios/{uuid} che restituisce available_to_trade_fiat per ogni asset.
     """
-    # Metodo 1: portfolios — restituisce il breakdown completo con USD/USDC
     try:
+        # Trova il portfolio DEFAULT
         port_res = await coinbase_request("GET", "/api/v3/brokerage/portfolios", cb_key=cb_key, cb_secret=cb_secret)
         portfolios = port_res.get("portfolios", [])
-        # Trova il portfolio default
         default = next((p for p in portfolios if p.get("type") == "DEFAULT"), None)
         if not default and portfolios:
             default = portfolios[0]
-        if default:
-            uuid = default.get("uuid", "")
-            detail = await coinbase_request("GET", f"/api/v3/brokerage/portfolios/{uuid}", cb_key=cb_key, cb_secret=cb_secret)
-            breakdown = detail.get("breakdown", {})
-            # cash_equivalent_value include USD e USDC
-            spot_pos = breakdown.get("spot_positions", [])
-            for pos in spot_pos:
-                if pos.get("asset") in ("USDC", "USD", "USDT"):
-                    val = float(pos.get("total_balance_fiat", 0) or pos.get("available_to_trade_fiat", 0) or 0)
-                    if val > 0:
-                        print(f"[BALANCE] {pos['asset']}: ${val:.2f} (via portfolios)")
-                        return val
+        if not default:
+            print("[BALANCE] nessun portfolio trovato")
+            return 0.0
+
+        uuid = default.get("uuid", "")
+        detail = await coinbase_request("GET", f"/api/v3/brokerage/portfolios/{uuid}", cb_key=cb_key, cb_secret=cb_secret)
+        spot_positions = detail.get("breakdown", {}).get("spot_positions", [])
+
+        total = 0.0
+        for pos in spot_positions:
+            if pos.get("asset") in ("USDC", "USD") and pos.get("is_cash"):
+                val = float(pos.get("available_to_trade_fiat", 0) or 0)
+                total += val
+                print(f"[BALANCE] {pos['asset']}: ${val:.2f} disponibile per trading")
+
+        if total > 0:
+            return total
+
+        # Fallback: total_cash_equivalent_balance dal portfolio
+        cash = detail.get("breakdown", {}).get("portfolio_balances", {}).get("total_cash_equivalent_balance", {})
+        total_cash = float(cash.get("value", 0) or 0)
+        if total_cash > 0:
+            print(f"[BALANCE] cash_equivalent fallback: ${total_cash:.2f}")
+            return total_cash
+
     except Exception as e:
         print(f"[BALANCE] portfolios error: {e}")
-
-    # Metodo 2: accounts — fallback classico
-    try:
-        accounts = await coinbase_request("GET", "/api/v3/brokerage/accounts", cb_key=cb_key, cb_secret=cb_secret)
-        total = 0.0
-        for acc in accounts.get("accounts", []):
-            if acc.get("currency") in ("USDC", "USD"):
-                val = float(acc.get("available_balance", {}).get("value", 0) or 0)
-                total += val
-        if total > 0:
-            print(f"[BALANCE] USD/USDC via accounts: ${total:.2f}")
-            return total
-    except Exception as e:
-        print(f"[BALANCE] accounts error: {e}")
 
     return 0.0
 
