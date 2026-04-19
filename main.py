@@ -776,7 +776,7 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
                 if any(x in err_str for x in ["insufficient", "insufficient_fund", "not enough"]):
                     state["running"] = False
                     add_log(state, "info", "STOP AUTO", f"Saldo insufficiente — sessione fermata")
-                    await send_telegram(f"⛔ STOP AUTO: saldo insufficiente su Coinbase")
+                    await send_telegram(f"STOP AUTO: saldo insufficiente")
                 return
             filled       = result.get("success_response", {})
             actual_price = float(filled.get("average_filled_price", price)) or price
@@ -1098,8 +1098,8 @@ async def scan_and_trade(state: dict, user_id: int = None):
             # Nessuna posizione aperta e saldo USDC esaurito — stop legittimo
             state["running"] = False
             add_log(state, "info", "STOP AUTO",
-                f"Saldo USDC insufficiente (${tradable_capital:.2f}) — sessione fermata")
-            await send_telegram(f"⛔ STOP AUTO: saldo USDC ${tradable_capital:.2f} insufficiente")
+                f"Saldo insufficiente ({'€' if state.get('use_revx') else '$'}{tradable_capital:.2f}) — sessione fermata")
+            await send_telegram(f"STOP AUTO: saldo insufficiente (€{tradable_capital:.2f})" if state.get("use_revx") else f"STOP AUTO: saldo USDC ${tradable_capital:.2f} insufficiente")
             return
     elif tradable_capital < 1.0 and not cfg.get("realMode", False):
         # Sim con capitale esaurito
@@ -1155,13 +1155,16 @@ async def scan_and_trade(state: dict, user_id: int = None):
     rsi_max       = cfg.get("rsiMax", 70.0)
     min_r         = cfg.get("minR", 0.01)
 
+    # Se Revolut X: usa tutte le coin con candele disponibili (non filtriamo per _coinbase_products)
+    # Se Coinbase: filtra solo le coin con prodotto disponibile
+    use_revx_filter = state.get("use_revx", False)
     universe = [
             {**d, "symbol": sym}
             for sym, d in market_data.items()
             if d["price"] > 0
             and d.get("volume24h", 0) >= min_vol
             and sym not in open_syms
-            and sym in _coinbase_products
+            and (use_revx_filter or sym in _coinbase_products)
             and sym in candle_data
             and (state["cooldowns"].get(sym, 0) < datetime.now().timestamp() * 1000)
         ]
@@ -1793,8 +1796,10 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
     rsi_s  = f"{cfg.get('rsiMin',40):.0f}-{cfg.get('rsiMax',60):.0f}" if cfg.get("rsiFilter", True) else "OFF"
     t1h_s  = "ON" if cfg.get("trend1hFilter", True) else "OFF"
     trl_s  = f"{cfg.get('trailingPct',0.5)*100:.0f}%" if cfg.get("trailingStop", True) else "OFF"
+    curr_sym = "€" if use_revx else "$"
+    exchange_name = "Revolut X" if use_revx else ("Coinbase" if cb_key else "SIM")
     add_log(state, "info", "AVVIO",
-        f"${capital:.0f} | {mode} | Cap: {capp:.0f}% | Alloc: {alloc:.0f}% | "
+        f"{curr_sym}{capital:.0f} | {mode} [{exchange_name}] | Cap: {capp:.0f}% | Alloc: {alloc:.0f}% | "
         f"EMA: {ema_s} | Trend1h: {t1h_s} | RSI: {rsi_s} | "
         f"TP2: {tp2r}R | Trailing: {trl_s} | MaxLoss: {mcl}"
     )
@@ -1856,7 +1861,7 @@ async def chat(body: dict, user_id: int = Depends(get_current_user)):
 def health():
     return {
         "status": "ok",
-        "coinbase": any(d["price"] > 0 for d in market_data.values()),
+        "market_data": any(d["price"] > 0 for d in market_data.values()),
         "candles": len(candle_data),
         "candles_age_min": round((time.time() - _candles_last_update) / 60, 1) if _candles_last_update else None,
     }
