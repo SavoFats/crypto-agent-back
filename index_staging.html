@@ -918,7 +918,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 </div>
 
 <script>
-const API = 'https://zentra-ziil.onrender.com';
+const API = 'https://crypto-agent-back-production-87b2.up.railway.app';
 
 let _authToken = localStorage.getItem('ca_token') || '';
 let _username  = localStorage.getItem('ca_username') || '';
@@ -1636,8 +1636,8 @@ async function setMode(real) {
       const r = await fetch(API + '/test_coinbase', { headers: authHeaders() });
       const d = await r.json();
       if (d.ok) {
-        const usdc = d.balances.find(b => b.currency === 'USDC');
-        const bal = usdc ? parseFloat(usdc.available) : 0;
+        const usdc = d.balances.find(b => b.currency === 'USDC/USD' || b.currency === 'USDC' || b.currency === 'USD');
+        const bal = d.usdc_tradable || (usdc ? parseFloat(usdc.available) : 0);
         const suggested = parseFloat((bal * 0.98).toFixed(2));
         document.getElementById('totalBalanceDisplay').textContent = '$' + bal.toFixed(2) + ' USDC disponibili';
         document.getElementById('totalBalanceDisplay').style.color = 'var(--green)';
@@ -2432,8 +2432,8 @@ async function loadHomeBalance() {
       const r = await fetch(API + '/test_coinbase', { headers: authHeaders() });
       const d = await r.json();
       if (d.ok) {
-        const usdc = d.balances.find(b => b.currency === 'USDC');
-        const bal = usdc ? parseFloat(usdc.available) : 0;
+        const usdc = d.balances.find(b => b.currency === 'USDC/USD' || b.currency === 'USDC' || b.currency === 'USD');
+        const bal = d.usdc_tradable || (usdc ? parseFloat(usdc.available) : 0);
         valEl.textContent = '$' + bal.toFixed(2);
         subEl.textContent = 'USDC disponibili su Coinbase';
         const tbd = document.getElementById('totalBalanceDisplay');
