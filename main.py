@@ -1990,6 +1990,31 @@ async def test_revx(user_id: int = Depends(get_current_user)):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+@app.get("/debug_revx_ticker")
+async def debug_revx_ticker():
+    """Mostra la struttura raw del ticker Revolut X per debug."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(f"{REVX_BASE}/api/1.0/market/tickers")
+            data = r.json()
+            tickers = data if isinstance(data, list) else data.get("data", [])
+            eur = [t for t in tickers if isinstance(t, dict) and str(t.get("symbol","")).endswith("-EUR")][:3]
+            return {"status": r.status_code, "total": len(tickers), "sample_eur": eur, "raw_type": type(data).__name__}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/debug_revx_candles")
+async def debug_revx_candles():
+    """Mostra la struttura raw delle candles Revolut X per debug."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(f"{REVX_BASE}/api/1.0/market/candles",
+                params={"symbol": "BTC-EUR", "interval": "5", "limit": 3})
+            data = r.json()
+            return {"status": r.status_code, "data": data}
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.get("/test_coinbase")
 async def test_coinbase(user_id: int = Depends(get_current_user)):
     cb_key, cb_secret = _ENV_CB_KEY, _ENV_CB_SECRET
