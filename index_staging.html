@@ -945,7 +945,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 </div>
 
 <script>
-const API = 'https://zentra-ziil.onrender.com';
+const API = 'https://crypto-agent-back-production-87b2.up.railway.app';
 
 let _authToken = localStorage.getItem('ca_token') || '';
 let _username  = localStorage.getItem('ca_username') || '';
@@ -2064,6 +2064,11 @@ function renderHomeSession() {
   });
 }
 
+function getPriceSym(pos) {
+  // Usa € per posizioni Revolut X, $ per le altre
+  return pos && pos.exchange === 'revx' ? '€' : '$';
+}
+
 // Cache grafici mini per non ricaricare ad ogni render
 const _miniChartCache = {};
 
@@ -2162,10 +2167,10 @@ function renderPositions() {
       </div>
       <div class="pos-divider"></div>
       <div class="pos-data">
-        <div class="pos-cell"><div class="pos-cell-label">Entrata</div><div class="pos-cell-value">$${p.entryPrice.toFixed(4)}</div></div>
-        <div class="pos-cell"><div class="pos-cell-label">Corrente</div><div class="pos-cell-value">$${p.currentPrice.toFixed(4)}</div></div>
-        <div class="pos-cell" style="border-top:1px solid var(--border)"><div class="pos-cell-label">Stop${tp1Hit?' (BE)':''}</div><div class="pos-cell-value" style="color:var(--red)">$${p.stopPrice.toFixed(4)}</div></div>
-        <div class="pos-cell" style="border-top:1px solid var(--border)"><div class="pos-cell-label">${tp1Hit?'TP2':'TP1'}</div><div class="pos-cell-value" style="color:var(--green)">$${(tp1Hit?tp2Price:tp1Price).toFixed(4)}</div></div>
+        <div class="pos-cell"><div class="pos-cell-label">Entrata</div><div class="pos-cell-value">${getPriceSym(p)}${p.entryPrice.toFixed(4)}</div></div>
+        <div class="pos-cell"><div class="pos-cell-label">Corrente</div><div class="pos-cell-value">${getPriceSym(p)}${p.currentPrice.toFixed(4)}</div></div>
+        <div class="pos-cell" style="border-top:1px solid var(--border)"><div class="pos-cell-label">Stop${tp1Hit?' (BE)':''}</div><div class="pos-cell-value" style="color:var(--red)">${getPriceSym(p)}${p.stopPrice.toFixed(4)}</div></div>
+        <div class="pos-cell" style="border-top:1px solid var(--border)"><div class="pos-cell-label">${tp1Hit?'TP2':'TP1'}</div><div class="pos-cell-value" style="color:var(--green)">${getPriceSym(p)}${(tp1Hit?tp2Price:tp1Price).toFixed(4)}</div></div>
       </div>
       <div class="pos-progress-wrap">
         <div class="pos-progress-labels"><span>SL</span><span>${pct.toFixed(2)}%</span><span>${tp1Hit?'TP2':'TP1'}</span></div>
