@@ -1991,27 +1991,44 @@ async def test_revx(user_id: int = Depends(get_current_user)):
         return {"ok": False, "error": str(e)}
 
 @app.get("/debug_revx_ticker")
-async def debug_revx_ticker():
-    """Mostra la struttura raw del ticker Revolut X per debug."""
+async def debug_revx_ticker(user_id: int = Depends(get_current_user)):
+    """Mostra la struttura raw del ticker Revolut X usando le chiavi dell'utente."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.get(f"{REVX_BASE}/api/1.0/market/tickers")
-            data = r.json()
-            tickers = data if isinstance(data, list) else data.get("data", [])
-            eur = [t for t in tickers if isinstance(t, dict) and str(t.get("symbol","")).endswith("-EUR")][:3]
-            return {"status": r.status_code, "total": len(tickers), "sample_eur": eur, "raw_type": type(data).__name__}
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT revx_key_id, revx_private_key FROM users WHERE id = $1", user_id)
+        if not row or not row["revx_key_id"]:
+            return {"error": "Chiavi RevX non configurate"}
+        key_id = decrypt_key(row["revx_key_id"])
+        priv   = decrypt_key(row["revx_private_key"])
+        result = await revx_request("GET", "/api/1.0/market/tickers", key_id=key_id, private_key=priv)
+        tickers = result if isinstance(result, list) else result.get("data", result.get("tickers", []))
+        eur = [t for t in (tickers if isinstance(tickers, list) else [])
+               if isinstance(t, dict) and str(t.get("symbol","")).endswith("-EUR")][:3]
+        return {"status": "ok", "total": len(tickers) if isinstance(tickers, list) else 0,
+                "sample_eur": eur, "raw_type": type(result).__name__,
+                "raw_keys": list(result.keys()) if isinstance(result, dict) else "list"}
     except Exception as e:
         return {"error": str(e)}
 
 @app.get("/debug_revx_candles")
-async def debug_revx_candles():
-    """Mostra la struttura raw delle candles Revolut X per debug."""
+async def debug_revx_candles(user_id: int = Depends(get_current_user)):
+    """Mostra la struttura raw delle candles Revolut X usando le chiavi dell'utente."""
     try:
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT revx_key_id, revx_private_key FROM users WHERE id = $1", user_id)
+        if not row or not row["revx_key_id"]:
+            return {"error": "Chiavi RevX non configurate"}
+        key_id = decrypt_key(row["revx_key_id"])
+        priv   = decrypt_key(row["revx_private_key"])
+        # Candles con auth
+        import time as _time
+        body_str = ""
+        path = "/api/1.0/market/candles"
+        query = "symbol=BTC-EUR&interval=5&limit=3"
+        headers = make_revx_signature(key_id, priv, "GET", path, query, body_str)
         async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.get(f"{REVX_BASE}/api/1.0/market/candles",
-                params={"symbol": "BTC-EUR", "interval": "5", "limit": 3})
-            data = r.json()
-            return {"status": r.status_code, "data": data}
+            r = await client.get(f"{REVX_BASE}{path}?{query}", headers=headers)
+        return {"status": r.status_code, "data": r.json()}
     except Exception as e:
         return {"error": str(e)}
 
