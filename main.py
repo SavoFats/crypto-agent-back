@@ -459,38 +459,43 @@ _products_last_update: float = 0
 
 REVX_BASE_PUB = "https://revx.revolut.com"
 
-async def fetch_revx_market_data() -> dict:
+async def fetch_revx_market_data(key_id: str = "", private_key: str = "") -> dict:
     """
-    Scarica ticker e variazioni da Revolut X (endpoint pubblico).
-    Restituisce dict sym -> {price_eur, change24h, volume24h}
+    Scarica ticker da Revolut X usando le chiavi utente.
+    Path corretto: GET /api/1.0/tickers
+    Restituisce dict sym -> {price_eur, change24h, volume24h, symbol_pair}
     """
     result = {}
+    if not key_id or not private_key:
+        return result
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            # Tickers pubblici - no auth (endpoint aperto)
-            r = await client.get(f"{REVX_BASE_PUB}/api/1.0/market/tickers")
-            if r.status_code != 200:
-                print(f"[REVX TICKER] status {r.status_code}")
-                return result
-            data = r.json()
-            tickers = data if isinstance(data, list) else data.get("data", [])
-            for t in tickers:
-                symbol = t.get("symbol", "")  # es. "BTC-EUR"
-                if not symbol.endswith("-EUR"):
-                    continue
-                sym = symbol[:-4]  # "BTC"
-                if not sym or sym in STABLES:
-                    continue
-                price = float(t.get("last_price") or t.get("close") or t.get("mid_price") or 0)
-                change24h = float(t.get("price_change_24h_pct") or t.get("change_24h") or 0)
-                volume24h = float(t.get("volume_24h") or t.get("volume") or 0)
-                if price > 0:
-                    result[sym] = {
-                        "price_eur": price,
-                        "change24h": change24h,
-                        "volume24h_eur": volume24h,
-                        "symbol_pair": symbol,
-                    }
+        data = await revx_request("GET", "/api/1.0/tickers",
+                                   key_id=key_id, private_key=private_key, params={})
+        tickers = data if isinstance(data, list) else data.get("tickers", data.get("data", []))
+        if not isinstance(tickers, list):
+            print(f"[REVX TICKER] risposta inattesa: {str(data)[:200]}")
+            return result
+        for t in tickers:
+            if not isinstance(t, dict):
+                continue
+            symbol = t.get("symbol", "")
+            if not symbol.endswith("-EUR"):
+                continue
+            sym = symbol[:-4]
+            if not sym or sym in STABLES:
+                continue
+            # Campi risposta Revolut X ticker
+            price = float(t.get("last_price") or t.get("close") or t.get("mid_price") or t.get("price") or 0)
+            change24h = float(t.get("price_change_24h_pct") or t.get("change_24h_pct") or t.get("change24h") or 0)
+            volume24h = float(t.get("volume_24h") or t.get("base_volume") or t.get("volume") or 0)
+            if price > 0:
+                result[sym] = {
+                    "price_eur": price,
+                    "change24h": change24h,
+                    "volume24h_eur": volume24h,
+                    "symbol_pair": symbol,
+                }
+        print(f"[REVX TICKER] {len(result)} coppie EUR caricate")
     except Exception as e:
         print(f"[REVX TICKER] error: {e}")
     return result
@@ -586,7 +591,15 @@ async def fetch_prices():
 
         # Overlay con dati Revolut X in EUR se disponibili
         try:
-            revx_data = await fetch_revx_market_data()
+            # Usa le chiavi del primo utente attivo con RevX
+            revx_key_id, revx_priv_key = "", ""
+            for state in user_sessions.values():
+                if state.get("revx_key_id") and state.get("use_revx"):
+                    revx_key_id = state["revx_key_id"]
+                    revx_priv_key = state["revx_private_key"]
+                    break
+            # Se non c'è sessione attiva, cerca nelle chiavi salvate in DB (non disponibile qui)
+            revx_data = await fetch_revx_market_data(revx_key_id, revx_priv_key)
             for sym, rd in revx_data.items():
                 if sym in market_data and rd["price_eur"] > 0:
                     market_data[sym]["price_eur"]    = rd["price_eur"]
@@ -1997,7 +2010,7 @@ async def test_revx(user_id: int = Depends(get_current_user)):
 
 @app.get("/debug_revx_ticker")
 async def debug_revx_ticker(user_id: int = Depends(get_current_user)):
-    """Prova path diversi per trovare quello corretto dei ticker Revolut X."""
+    """Tickers Revolut X — path corretto: /api/1.0/tickers"""
     try:
         async with db_pool.acquire() as conn:
             row = await conn.fetchrow("SELECT revx_key_id, revx_private_key FROM users WHERE id = $1", user_id)
@@ -2005,21 +2018,23 @@ async def debug_revx_ticker(user_id: int = Depends(get_current_user)):
             return {"error": "Chiavi RevX non configurate"}
         key_id = decrypt_key(row["revx_key_id"])
         priv   = decrypt_key(row["revx_private_key"])
-        results = {}
-        for path in ["/api/1.0/market/tickers", "/api/1.0/market/ticker",
-                     "/api/1.0/tickers", "/api/1.0/orders/active"]:
-            try:
-                r = await revx_request("GET", path, key_id=key_id, private_key=priv, params={})
-                results[path] = str(r)[:300]
-            except Exception as e:
-                results[path] = f"ERROR: {e}"
-        return results
+        result = await revx_request("GET", "/api/1.0/tickers", key_id=key_id, private_key=priv, params={})
+        tickers = result if isinstance(result, list) else result.get("tickers", result.get("data", []))
+        eur = [t for t in (tickers if isinstance(tickers, list) else [])
+               if isinstance(t, dict) and str(t.get("symbol","")).endswith("-EUR")][:3]
+        return {
+            "raw_type": type(result).__name__,
+            "raw_keys": list(result.keys()) if isinstance(result, dict) else "list",
+            "total": len(tickers) if isinstance(tickers, list) else 0,
+            "sample_eur": eur,
+            "first_2_raw": (tickers[:2] if isinstance(tickers, list) else [str(result)[:300]])
+        }
     except Exception as e:
         return {"error": str(e)}
 
 @app.get("/debug_revx_candles")
 async def debug_revx_candles(user_id: int = Depends(get_current_user)):
-    """Prova path diversi per trovare quello corretto delle candles Revolut X."""
+    """Candles Revolut X — path corretto: /api/1.0/candles/{symbol}"""
     try:
         async with db_pool.acquire() as conn:
             row = await conn.fetchrow("SELECT revx_key_id, revx_private_key FROM users WHERE id = $1", user_id)
@@ -2027,21 +2042,15 @@ async def debug_revx_candles(user_id: int = Depends(get_current_user)):
             return {"error": "Chiavi RevX non configurate"}
         key_id = decrypt_key(row["revx_key_id"])
         priv   = decrypt_key(row["revx_private_key"])
-        results = {}
-        tests = [
-            ("/api/1.0/market/candles", {"symbol": "BTC-EUR", "interval": "5", "limit": "3"}),
-            ("/api/1.0/market/candles", {"symbol": "BTC-EUR", "interval": "5m", "limit": "3"}),
-            ("/api/1.0/market/ohlcv",   {"symbol": "BTC-EUR", "interval": "5", "limit": "3"}),
-            ("/api/1.0/market/klines",  {"symbol": "BTC-EUR", "interval": "5m", "limit": "3"}),
-        ]
-        for path, params in tests:
-            key = path + "?" + "&".join(f"{k}={v}" for k,v in params.items())
-            try:
-                r = await revx_request("GET", path, key_id=key_id, private_key=priv, params=params)
-                results[key] = str(r)[:300]
-            except Exception as e:
-                results[key] = f"ERROR: {e}"
-        return results
+        # Candles: simbolo nel path, interval in minuti come query param
+        result = await revx_request("GET", "/api/1.0/candles/BTC-EUR",
+                                    key_id=key_id, private_key=priv,
+                                    params={"interval": "5", "limit": "3"})
+        return {
+            "raw_type": type(result).__name__,
+            "raw_keys": list(result.keys()) if isinstance(result, dict) else "list",
+            "data": result
+        }
     except Exception as e:
         return {"error": str(e)}
 
