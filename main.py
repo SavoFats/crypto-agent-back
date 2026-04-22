@@ -589,6 +589,10 @@ async def fetch_prices():
             for state in user_sessions.values():
                 for pos in state["positions"]:
                     if pos["symbol"] == sym:
+                        # NON aggiornare con prezzo USD le posizioni RevX
+                        # Il prezzo EUR viene aggiornato dopo nell'overlay RevX
+                        if pos.get("exchange") == "revx":
+                            continue
                         pos["currentPrice"] = price
                         if price > pos["highPrice"]:
                             pos["highPrice"] = price
@@ -605,9 +609,10 @@ async def fetch_prices():
             revx_data = await fetch_revx_market_data(revx_key_id, revx_priv_key)
             for sym, rd in revx_data.items():
                 if sym in market_data and rd["price_eur"] > 0:
-                    market_data[sym]["price_eur"]    = rd["price_eur"]
-                    market_data[sym]["change24h_eur"] = rd["change24h"]
-                    market_data[sym]["symbol_revx"]  = rd["symbol_pair"]
+                    market_data[sym]["price_eur"]   = rd["price_eur"]
+                    # Non sovrascrivere change24h — manteniamo quello Binance (più affidabile)
+                    # change24h_eur=0 da RevX ticker (campo non disponibile)
+                    market_data[sym]["symbol_revx"] = rd["symbol_pair"]
                 elif rd["price_eur"] > 0:
                     # Coin disponibile su Revolut X ma non su Coinbase
                     market_data[sym] = {
@@ -630,6 +635,8 @@ async def fetch_prices():
                             pos["highPrice"] = rd["price_eur"]
         except Exception as e:
             print(f"[REVX OVERLAY] error: {e}")
+            # In caso di errore, le posizioni RevX mantengono l'ultimo currentPrice EUR valido
+            # (non vengono toccate dal loop USD sopra grazie al check exchange==revx)
 
     except Exception as e:
         print(f"Fetch error: {e}")
@@ -1114,6 +1121,14 @@ async def scan_and_trade(state: dict, user_id: int = None):
     for pos in list(state["positions"]):
         cur   = pos["currentPrice"]
         entry = pos["entryPrice"]
+        # Sanity check: per posizioni RevX entrambi i prezzi devono essere EUR
+        # Se currentPrice è molto diverso da entryPrice (>50%) probabilmente è un mix USD/EUR
+        if pos.get("exchange") == "revx" and entry > 0:
+            ratio = cur / entry
+            if ratio > 1.5 or ratio < 0.5:
+                # Prezzo anomalo — probabilmente USD invece di EUR, skip questo ciclo
+                print(f"[SANITY] {pos['symbol']} RevX prezzo anomalo: entry={entry:.2f} cur={cur:.2f} ratio={ratio:.2f} — skip")
+                continue
         trailing_stop   = cfg.get("trailingStop", True)
         trailing_pct    = cfg.get("trailingPct", 0.5)
 
@@ -2043,7 +2058,7 @@ async def debug_revx_ticker(user_id: int = Depends(get_current_user)):
         result = await revx_request("GET", "/api/1.0/tickers", key_id=key_id, private_key=priv, params={})
         tickers = result if isinstance(result, list) else result.get("tickers", result.get("data", []))
         eur = [t for t in (tickers if isinstance(tickers, list) else [])
-               if isinstance(t, dict) and str(t.get("symbol","")).endswith("-EUR")][:3]
+               if isinstance(t, dict) and str(t.get("symbol","")).endswith("/EUR")][:3]
         return {
             "raw_type": type(result).__name__,
             "raw_keys": list(result.keys()) if isinstance(result, dict) else "list",
