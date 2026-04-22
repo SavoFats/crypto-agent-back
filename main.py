@@ -589,54 +589,12 @@ async def fetch_prices():
             for state in user_sessions.values():
                 for pos in state["positions"]:
                     if pos["symbol"] == sym:
-                        # NON aggiornare con prezzo USD le posizioni RevX
-                        # Il prezzo EUR viene aggiornato dopo nell'overlay RevX
-                        if pos.get("exchange") == "revx":
-                            continue
                         pos["currentPrice"] = price
                         if price > pos["highPrice"]:
                             pos["highPrice"] = price
 
-        # Overlay con dati Revolut X in EUR se disponibili
-        try:
-            # Usa chiavi sessione attiva, altrimenti chiavi globali caricate all'avvio
-            revx_key_id, revx_priv_key = _global_revx_key_id, _global_revx_private_key
-            for state in user_sessions.values():
-                if state.get("revx_key_id") and state.get("use_revx"):
-                    revx_key_id = state["revx_key_id"]
-                    revx_priv_key = state["revx_private_key"]
-                    break
-            revx_data = await fetch_revx_market_data(revx_key_id, revx_priv_key)
-            for sym, rd in revx_data.items():
-                if sym in market_data and rd["price_eur"] > 0:
-                    market_data[sym]["price_eur"]   = rd["price_eur"]
-                    # Non sovrascrivere change24h — manteniamo quello Binance (più affidabile)
-                    # change24h_eur=0 da RevX ticker (campo non disponibile)
-                    market_data[sym]["symbol_revx"] = rd["symbol_pair"]
-                elif rd["price_eur"] > 0:
-                    # Coin disponibile su Revolut X ma non su Coinbase
-                    market_data[sym] = {
-                        "price": 0.0, "price_eur": rd["price_eur"],
-                        "change1h": 0.0, "change24h": rd["change24h"],
-                        "change24h_eur": rd["change24h"],
-                        "volume24h": rd["volume24h_eur"],
-                        "icon": sym[0], "symbol_revx": rd["symbol_pair"]
-                    }
-            # Aggiorna prezzi posizioni aperte con EUR se use_revx
-            for state in user_sessions.values():
-                if not state.get("use_revx"):
-                    continue
-                for pos in state["positions"]:
-                    sym = pos["symbol"]
-                    rd = revx_data.get(sym)
-                    if rd and rd["price_eur"] > 0:
-                        pos["currentPrice"] = rd["price_eur"]
-                        if rd["price_eur"] > pos["highPrice"]:
-                            pos["highPrice"] = rd["price_eur"]
-        except Exception as e:
-            print(f"[REVX OVERLAY] error: {e}")
-            # In caso di errore, le posizioni RevX mantengono l'ultimo currentPrice EUR valido
-            # (non vengono toccate dal loop USD sopra grazie al check exchange==revx)
+        # Nota: prezzi da Binance USDT — usati per segnali tecnici (EMA, RSI)
+        # Gli ordini RevX usano quote_size EUR, quindi il prezzo USD non influisce sull'esecuzione
 
     except Exception as e:
         print(f"Fetch error: {e}")
@@ -808,15 +766,9 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
                     add_log(state, "info", "ERRORE", f"Ordine RevX {sym} fallito: {err_msg}")
                     await send_telegram(f"ERRORE ORDINE RevX {sym}: {err_msg[:100]}")
                     return
-                # Prezzo da risposta RevX, fallback su price_eur (EUR), MAI su price (USD)
-                price_eur = market_data.get(sym, {}).get("price_eur", 0.0)
-                actual_price = float(data.get("average_price") or data.get("price") or price_eur or price)
-                # Se il prezzo è chiaramente USD (molto diverso da price_eur), usa price_eur
-                if price_eur > 0 and actual_price > 0:
-                    ratio = actual_price / price_eur
-                    if ratio > 1.3 or ratio < 0.7:
-                        print(f"[REVX ORDER] prezzo risposta {actual_price} sembra USD, uso price_eur {price_eur}")
-                        actual_price = price_eur
+                # Prezzo di entrata: da risposta RevX, fallback su prezzo Binance USD
+                # Tutto in USD — coerente con currentPrice aggiornato da Binance
+                actual_price = float(data.get("average_price") or data.get("price") or price)
                 qty_purchased = size / actual_price if actual_price > 0 else 0.0
                 stop_price  = actual_price * (1 - R_pct)
                 tp1_price   = actual_price * (1 + R_pct)
@@ -1129,14 +1081,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
     for pos in list(state["positions"]):
         cur   = pos["currentPrice"]
         entry = pos["entryPrice"]
-        # Sanity check: per posizioni RevX entrambi i prezzi devono essere EUR
-        # Se currentPrice è molto diverso da entryPrice (>50%) probabilmente è un mix USD/EUR
-        if pos.get("exchange") == "revx" and entry > 0:
-            ratio = cur / entry
-            if ratio > 1.5 or ratio < 0.5:
-                # Prezzo anomalo — probabilmente USD invece di EUR, skip questo ciclo
-                print(f"[SANITY] {pos['symbol']} RevX prezzo anomalo: entry={entry:.2f} cur={cur:.2f} ratio={ratio:.2f} — skip")
-                continue
+
         trailing_stop   = cfg.get("trailingStop", True)
         trailing_pct    = cfg.get("trailingPct", 0.5)
 
