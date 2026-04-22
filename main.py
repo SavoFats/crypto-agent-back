@@ -933,9 +933,25 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
             try:
                 import uuid as _uuid
                 qty_to_sell = round(qty_purchased * 0.5, 8) if partial else round(qty_purchased, 8)
+                symbol_pair = pos.get("symbol_pair", f"{sym}-EUR")
+                # Leggi saldo reale da RevX per evitare "Insufficient balance"
+                try:
+                    balances = await revx_request("GET", "/api/1.0/balances",
+                                                  key_id=revx_key_id, private_key=revx_priv)
+                    bal_list = balances if isinstance(balances, list) else balances.get("balances", [])
+                    for b in bal_list:
+                        if b.get("currency") == sym:
+                            real_qty = float(b.get("available", 0) or 0)
+                            if real_qty > 0 and real_qty < qty_to_sell:
+                                print(f"[REVX SELL] qty tracciata {qty_to_sell} > disponibile {real_qty}, uso reale")
+                                qty_to_sell = round(real_qty * (0.5 if partial else 1.0), 8)
+                                pos["qty_purchased"] = real_qty  # aggiorna per futuri calcoli
+                            break
+                except Exception as be:
+                    print(f"[REVX SELL] errore lettura saldo: {be}")
                 order_body = {
                     "client_order_id": str(_uuid.uuid4()),
-                    "symbol": pos.get("symbol_pair", f"{sym}-EUR"),
+                    "symbol": symbol_pair,
                     "side": "SELL",
                     "order_configuration": {"market": {"base_size": str(qty_to_sell)}}
                 }
