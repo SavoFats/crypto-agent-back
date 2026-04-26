@@ -796,16 +796,29 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
         </button>
       </div>
     </div>
-    <div class="kpi-grid">
-      <div class="kpi">
-        <div class="kpi-label">Capitale</div>
-        <div class="kpi-value up" id="kpiCapital">0</div>
-        <div class="kpi-sub" id="kpiCapSub">simulato</div>
+    <!-- Widget capitale redesign -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div class="card" style="padding:14px 16px;margin:0">
+        <div class="card-label" style="margin-bottom:6px;font-size:10px">INVESTITO</div>
+        <div style="font-size:22px;font-weight:800;font-variant-numeric:tabular-nums" id="kpiInvested">--</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px" id="kpiInvestedSub">in posizioni aperte</div>
       </div>
+      <div class="card" style="padding:14px 16px;margin:0">
+        <div class="card-label" style="margin-bottom:6px;font-size:10px">DISPONIBILE</div>
+        <div style="font-size:22px;font-weight:800;font-variant-numeric:tabular-nums" id="kpiCapital">--</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px" id="kpiCapSub">pronto per nuovi trade</div>
+      </div>
+    </div>
+    <div class="kpi-grid">
       <div class="kpi">
         <div class="kpi-label">Trade</div>
         <div class="kpi-value" id="kpiTrades">0</div>
         <div class="kpi-sub" id="kpiWR">Win rate: --</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">P&amp;L sessione</div>
+        <div class="kpi-value" id="kpiPnl">--</div>
+        <div class="kpi-sub" id="kpiPnlSub">--</div>
       </div>
     </div>
     <!-- Log agente scrollabile -->
@@ -1980,12 +1993,40 @@ function render() {
   pnlEl.textContent = (pnl >= 0 ? '+' : '') + getCurrSym() + pnl.toFixed(2);
   pnlEl.style.color = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
 
-  // KPI capitale — il backend restituisce già pnl = total - capital
-  const cap = (S.capital||0) + pnl;
-  const capEl = document.getElementById('kpiCapital');
-  capEl.textContent = getCurrSym() + cap.toFixed(2);
-  capEl.className = 'kpi-value' + (pnl > 0 ? ' up' : pnl < 0 ? ' down' : '');
-  document.getElementById('kpiCapSub').textContent = window._realMode ? (_hasRevxKeys ? 'reale Revolut X' : 'reale Coinbase') : 'simulato';
+  // Capitale allocato in posizioni aperte
+  const capitalTotal = S.capital || 0;       // capitale totale allocato alla sessione
+  const capitalFree = S.currentCapital || 0; // capitale rimasto libero
+  const capitalInvested = capitalTotal - capitalFree; // investito in posizioni
+
+  const investedEl = document.getElementById('kpiInvested');
+  const availEl = document.getElementById('kpiCapital');
+  if (investedEl) {
+    investedEl.textContent = capitalInvested > 0.01 ? getCurrSym() + capitalInvested.toFixed(2) : '--';
+    investedEl.style.color = capitalInvested > 0.01 ? 'var(--blue)' : 'var(--text3)';
+  }
+  if (availEl) {
+    availEl.textContent = getCurrSym() + capitalFree.toFixed(2);
+    availEl.style.color = capitalFree > 0.01 ? 'var(--green)' : 'var(--text3)';
+  }
+  const subInv = document.getElementById('kpiInvestedSub');
+  if (subInv) {
+    const nPos = (S.positions || []).length;
+    subInv.textContent = nPos > 0 ? nPos + (nPos === 1 ? ' posizione aperta' : ' posizioni aperte') : 'nessuna posizione';
+  }
+  document.getElementById('kpiCapSub').textContent = capitalFree < 0.5 ? 'capitale esaurito' : 'pronto per nuovi trade';
+
+  // KPI P&L
+  const kpiPnlEl = document.getElementById('kpiPnl');
+  const kpiPnlSub = document.getElementById('kpiPnlSub');
+  if (kpiPnlEl) {
+    kpiPnlEl.textContent = (pnl >= 0 ? '+' : '') + getCurrSym() + pnl.toFixed(2);
+    kpiPnlEl.style.color = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
+  }
+  if (kpiPnlSub) {
+    const pct = capitalTotal > 0 ? (pnl / capitalTotal * 100) : 0;
+    kpiPnlSub.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '% sulla sessione';
+    kpiPnlSub.style.color = pct > 0 ? 'var(--green)' : pct < 0 ? 'var(--red)' : 'var(--text3)';
+  }
 
   // KPI trades
   document.getElementById('kpiTrades').textContent = S.tradeCount || 0;
@@ -2001,11 +2042,12 @@ function render() {
   if (actWrap) {
     if (logs.length > 0 && S.running) {
       actWrap.style.display = 'block';
+      const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
       actList.innerHTML = logs.map(l => {
         const time = l.ts ? new Date(l.ts).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit', second:'2-digit'}) : (l.time || '');
         return `<div class="agent-msg">
-          <div class="agent-msg-dot ${l.type}"></div>
-          <div class="agent-msg-text"><strong>${l.label}</strong> ${l.desc}</div>
+          <div class="agent-msg-dot ${esc(l.type)}"></div>
+          <div class="agent-msg-text"><strong>${esc(l.label)}</strong> ${esc(l.desc)}</div>
           <div class="agent-msg-time">${time}</div>
         </div>`;
       }).join('');
