@@ -312,6 +312,10 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 .fdd-item:hover, .fdd-item:active { background:var(--surface2); }
 .fdd-item.selected { color:var(--blue); }
 
+/* Grafico mini coin nelle posizioni */
+.pos-chart-wrap { margin-top:10px; height:60px; position:relative; }
+.pos-chart-canvas { width:100%; height:60px; display:block; }
+
 /* Mini-log agente nel monitor */
 .agent-msg { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
 .agent-msg:last-child { border-bottom:none; }
@@ -373,8 +377,8 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
   </div>
   <div class="auth-card" id="apiKeysCard" style="display:none">
     <div class="auth-logo"><span class="auth-logo-dot"></span><span style="font-size:20px;font-weight:700">Zentra</span></div>
-    <div class="auth-title">Collega Coinbase</div>
-    <div class="auth-sub">Inserisci le tue API key di Coinbase Advanced per abilitare il trading reale</div>
+    <div class="auth-title">Collega Revolut X</div>
+    <div class="auth-sub">Inserisci le tue credenziali Revolut X per abilitare il trading reale</div>
     <div class="auth-error" id="keysError"></div>
     <div class="auth-field">
       <label>API Key</label>
@@ -407,9 +411,10 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <div class="profile-menu-user" id="pmUsername">--</div>
     <div class="profile-menu-sub" id="pmMode" style="display:none"></div>
   </div>
-  <div class="profile-menu-item" onclick="openApiKeysFromMenu()">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-    Configura API Coinbase
+  <!-- Configura API Coinbase nascosto — fallback silenzioso -->
+  <div class="profile-menu-item" onclick="showRevxConfig()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+    Configura Revolut X
   </div>
   <div class="profile-menu-toggle" id="simModeRow" style="display:none">
     <div class="profile-menu-toggle-label">
@@ -439,10 +444,32 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 <div class="modal-overlay" id="confirmModal">
   <div class="modal-card">
     <div class="modal-title">&#9888;&#65039; Sessione Reale</div>
-    <div class="modal-body" id="confirmModalBody">Stai per avviare una sessione con denaro reale su Coinbase. Gli ordini verranno eseguiti immediatamente. Confermi?</div>
+    <div class="modal-body" id="confirmModalBody">Stai per avviare una sessione con denaro reale. Gli ordini verranno eseguiti immediatamente sul tuo account. Confermi?</div>
     <div class="modal-actions">
       <button class="modal-btn cancel" onclick="closeModal()">Annulla</button>
       <button class="modal-btn confirm-real" onclick="confirmRealStart()">Conferma</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Revolut X config -->
+<div class="modal-overlay" id="revxModal">
+  <div class="modal-card" style="max-width:400px">
+    <div class="modal-title">Revolut X API</div>
+    <div class="modal-body" style="text-align:left">
+      <div class="field" style="margin-bottom:12px">
+        <div class="field-label">API Key ID</div>
+        <input type="text" id="revxKeyId" placeholder="2LDsmJVAh..." style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;color:var(--text);font-size:14px;font-family:var(--sans);outline:none;box-sizing:border-box">
+      </div>
+      <div class="field">
+        <div class="field-label">Chiave privata (private_key.pem)</div>
+        <textarea id="revxPrivateKey" rows="6" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;color:var(--text);font-size:11px;font-family:monospace;outline:none;box-sizing:border-box;resize:vertical"></textarea>
+        <div class="field-hint">Incolla il contenuto completo del file private_key.pem</div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="document.getElementById('revxModal').classList.remove('open')">Annulla</button>
+      <button class="modal-btn confirm" onclick="saveRevxKeys()">Salva</button>
     </div>
   </div>
 </div>
@@ -451,7 +478,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 <div class="modal-overlay" id="sessionActiveModal">
   <div class="modal-card">
     <div class="modal-title">Sessione in corso</div>
-    <div class="modal-body">Non puoi cambiare modalità mentre una sessione è attiva. Interrompi prima la sessione dal Monitor, poi torna qui per effettuare il cambio.</div>
+    <div class="modal-body">Non puoi modificare la configurazione mentre una sessione è attiva. Interrompi prima la sessione dal Monitor, poi torna qui per effettuare le modifiche.</div>
     <div class="modal-actions" style="grid-template-columns:1fr">
       <button class="modal-btn cancel" style="text-align:center" onclick="document.getElementById('sessionActiveModal').classList.remove('open')">Chiudi</button>
     </div>
@@ -550,7 +577,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <div class="field">
       <div class="field-label">Saldo totale disponibile</div>
       <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;font-size:16px;font-weight:700;color:var(--text3)" id="totalBalanceDisplay">--</div>
-      <div class="field-hint">Aggiornato in tempo reale da Coinbase / simulato</div>
+      <div class="field-hint" id="balanceSourceHint">Aggiornato in tempo reale da Revolut X</div>
     </div>
     <!-- elemento nascosto per compatibilità JS (dataset.total) -->
     <input type="hidden" id="capital">
@@ -718,9 +745,9 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <div class="section-label">Gestione Rischio</div>
 
     <div class="field">
-      <div class="field-label">Volume minimo universe <span id="volVal">$0M</span></div>
+      <div class="field-label">Volume minimo universe <span id="volVal">€0M</span></div>
       <input type="range" id="minVolume" min="0" max="500" value="0" step="1"
-        oninput="document.getElementById('volVal').textContent='$'+this.value+'M'">
+        oninput="document.getElementById('volVal').textContent=getCurrSym()+this.value+'M'">
       <div class="field-hint">Coin con volume inferiore vengono escluse dall'universo</div>
     </div>
 
@@ -772,7 +799,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <div class="kpi-grid">
       <div class="kpi">
         <div class="kpi-label">Capitale</div>
-        <div class="kpi-value up" id="kpiCapital">$0</div>
+        <div class="kpi-value up" id="kpiCapital">0</div>
         <div class="kpi-sub" id="kpiCapSub">simulato</div>
       </div>
       <div class="kpi">
@@ -781,11 +808,11 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
         <div class="kpi-sub" id="kpiWR">Win rate: --</div>
       </div>
     </div>
-    <!-- Mini-log agente -->
+    <!-- Log agente scrollabile -->
     <div id="agentActivityWrap" style="display:none;margin-bottom:12px">
       <div class="card" style="padding:14px 16px">
         <div class="card-label" style="margin-bottom:10px">Attivita agente</div>
-        <div id="agentActivityList"></div>
+        <div id="agentActivityList" style="max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
       </div>
     </div>
 
@@ -925,6 +952,7 @@ let _username  = localStorage.getItem('ca_username') || '';
 let _emaFilter = true;
 let _hasApiKeys = false;
 let _simMode = true; // default simulazione
+let _hasRevxKeys = false;
 let _pendingStartCfg = null;
 let _newTradeCount = 0;
 let _lastSeenTradeCount = 0;
@@ -953,6 +981,11 @@ function closeProfileOnOutside(e) {
   }
 }
 function openApiKeysFromMenu() {
+  if (S.running) {
+    document.getElementById('profileMenu').classList.remove('open');
+    document.getElementById('sessionActiveModal').classList.add('open');
+    return;
+  }
   document.getElementById('profileMenu').classList.remove('open');
   showApiKeys();
   document.getElementById('authScreen').style.display = 'flex';
@@ -1007,7 +1040,7 @@ function showConfirmModal(cfg) {
   const capital = cfg.capital.toFixed(2);
   const capPct = Math.round((cfg.capitalPct || 1) * 100);
   document.getElementById('confirmModalBody').innerHTML =
-    'Stai per avviare una sessione <strong style="color:var(--red)">REALE</strong> con il <strong>' + capPct + '%</strong> del tuo saldo (<strong>$' + capital + '</strong>) su Coinbase.<br><br>Gli ordini verranno eseguiti con denaro vero. Confermi?';
+    'Stai per avviare una sessione <strong style="color:var(--red)">REALE</strong> con il <strong>' + capPct + '%</strong> del tuo saldo (<strong>' + getCurrSym() + capital + '</strong>) sul tuo exchange.<br><br>Gli ordini verranno eseguiti con denaro vero. Confermi?';
   document.getElementById('confirmModal').classList.add('open');
 }
 function closeModal() {
@@ -1166,8 +1199,9 @@ async function loadUserProfile() {
     const wl = await wlRes.json();
 
     _hasApiKeys = me.has_api_keys || false;
+    _hasRevxKeys = me.has_revx_keys || false;
     _simMode = me.sim_mode !== undefined ? me.sim_mode : true;
-    window._realMode = _hasApiKeys && !_simMode;
+    window._realMode = (_hasApiKeys || _hasRevxKeys) && !_simMode;
 
     if (me.avatar_b64) {
       applyAvatar(me.avatar_b64);
@@ -1185,6 +1219,63 @@ async function loadUserProfile() {
   } catch(e) {
     applyAvatar(localStorage.getItem('ca_avatar'));
   }
+}
+
+function showRevxConfig() {
+  if (S.running) {
+    document.getElementById('profileMenu').classList.remove('open');
+    document.getElementById('sessionActiveModal').classList.add('open');
+    return;
+  }
+  document.getElementById('profileMenu').classList.remove('open');
+  document.getElementById('revxModal').classList.add('open');
+}
+
+async function saveRevxKeys() {
+  const keyId = document.getElementById('revxKeyId').value.trim();
+  const privateKey = document.getElementById('revxPrivateKey').value.trim();
+  if (!keyId || !privateKey) {
+    alert('Inserisci sia il Key ID che la chiave privata');
+    return;
+  }
+  try {
+    const r = await fetch(API + '/auth/save_revx_keys', {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ key_id: keyId, private_key: privateKey })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('revxModal').classList.remove('open');
+      // Test connessione
+      const tr = await fetch(API + '/test_revx', { headers: authHeaders() });
+      const td = await tr.json();
+      if (td.ok) {
+        const saldi = td.balances.length > 0
+          ? td.balances.map(b => parseFloat(b.available).toFixed(2) + ' ' + b.currency).join(' · ')
+          : 'nessun saldo disponibile';
+        showToast('Revolut X connesso — ' + saldi);
+      } else {
+        showToast('Chiavi salvate ma connessione fallita: ' + (td.error || 'errore sconosciuto'), true);
+      }
+    }
+  } catch(e) {
+    alert('Errore: ' + e.message);
+  }
+}
+
+function showToast(msg, isError = false) {
+  let t = document.getElementById('_toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = '_toast';
+    t.style.cssText = 'position:fixed;bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 16px);left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);font-size:13px;font-weight:600;padding:10px 20px;border-radius:20px;z-index:999;white-space:nowrap;transition:opacity 0.3s;pointer-events:none';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.background = isError ? 'var(--red)' : 'var(--text)';
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3000);
 }
 
 async function setSimMode(sim) {
@@ -1212,16 +1303,18 @@ async function setSimMode(sim) {
 function updateSimToggle() {
   const toggle = document.getElementById('simModeToggle');
   const row = document.getElementById('simModeRow');
-  if (row) row.style.display = _hasApiKeys ? 'flex' : 'none';
+  // Mostra toggle simulazione solo se ha almeno un exchange reale configurato
+  if (row) row.style.display = (_hasApiKeys || _hasRevxKeys) ? 'flex' : 'none';
   if (toggle) toggle.classList.toggle('on', _simMode);
   // Aggiorna badge in config
   const lbl = document.getElementById('cfgModeLabel');
   const badge = document.getElementById('cfgModeBadge');
-  const isReal = _hasApiKeys && !_simMode;
-  if (lbl) lbl.textContent = isReal ? 'Reale' : 'Simulazione';
+  const isReal = (_hasApiKeys || _hasRevxKeys) && !_simMode;
+  let modeLabel = 'Simulazione';
+  if (isReal) modeLabel = _hasRevxKeys ? 'Reale — Revolut X' : 'Reale — Coinbase';
+  if (lbl) lbl.textContent = modeLabel;
   if (lbl) lbl.style.color = isReal ? 'var(--red)' : 'var(--text2)';
   if (badge) badge.style.display = 'inline-flex';
-  // Aggiorna _realMode globale
   window._realMode = isReal;
 }
 
@@ -1485,7 +1578,7 @@ function resetConfigToDefaults() {
   document.getElementById('minR').value = 1.0; document.getElementById('minRVal').textContent = '1.0%';
   document.getElementById('pullbackTolerance').value = 1.5; document.getElementById('pullbackVal').textContent = '1.5%';
   document.getElementById('volMultiplier').value = 1.2; document.getElementById('volMultVal').textContent = '1.2x';
-  document.getElementById('minVolume').value = 0; document.getElementById('volVal').textContent = '$0M';
+  document.getElementById('minVolume').value = 0; document.getElementById('volVal').textContent = getCurrSym() + '0M';
   document.getElementById('maxTrades').value = 0; updateMaxTrades();
   document.getElementById('maxConsecutiveLosses').value = 3; updateMaxLoss();
   document.getElementById('cooldown').value = 0; document.getElementById('cdVal').textContent = '0h';
@@ -1515,7 +1608,7 @@ function restoreConfigFromStorage() {
   if (saved.minR !== undefined) { const mr=(saved.minR*100).toFixed(1); document.getElementById('minR').value=mr; document.getElementById('minRVal').textContent=mr+'%'; }
   if (saved.pullbackTolerance) { const pt=(saved.pullbackTolerance*100).toFixed(1); document.getElementById('pullbackTolerance').value=pt; document.getElementById('pullbackVal').textContent=pt+'%'; }
   if (saved.volMultiplier) { document.getElementById('volMultiplier').value=saved.volMultiplier; document.getElementById('volMultVal').textContent=parseFloat(saved.volMultiplier).toFixed(1)+'x'; }
-  if (saved.minVolume) { const mv=saved.minVolume/1000000; document.getElementById('minVolume').value=mv; document.getElementById('volVal').textContent='$'+mv+'M'; }
+  if (saved.minVolume) { const mv=saved.minVolume/1000000; document.getElementById('minVolume').value=mv; document.getElementById('volVal').textContent=getCurrSym()+mv+'M'; }
   if (saved.maxTrades !== undefined) { document.getElementById('maxTrades').value=saved.maxTrades; updateMaxTrades(); }
   if (saved.maxConsecutiveLosses) { document.getElementById('maxConsecutiveLosses').value=saved.maxConsecutiveLosses; updateMaxLoss(); }
   if (saved.cooldown !== undefined) { document.getElementById('cooldown').value=saved.cooldown; document.getElementById('cdVal').textContent=saved.cooldown+'h'; }
@@ -1539,12 +1632,23 @@ function restoreConfigFromStorage() {
   updateAlloc();
 }
 
+function getCurrSym() {
+  // Restituisce il simbolo valuta corretto basato sull'exchange attivo
+  return _hasRevxKeys && !_simMode ? '€' : '$';
+}
+
+function getFeePct() {
+  // Fee per lato: Revolut X 0.09% taker, Coinbase 0.6%
+  return _hasRevxKeys && !_simMode ? 0.0009 : 0.006;
+}
+
 function updateCapitalPct() {
   const pct = parseInt(document.getElementById('capitalPct').value);
   document.getElementById('capitalPctVal').textContent = pct + '%';
   const total = parseFloat(document.getElementById('capital').dataset.total || 0);
-  const dollars = total > 0 ? (total * pct / 100) : 0;
-  document.getElementById('capitalDisplay').textContent = dollars > 0 ? '$' + dollars.toFixed(2) : '--';
+  const amount = total > 0 ? (total * pct / 100) : 0;
+  const sym = getCurrSym();
+  document.getElementById('capitalDisplay').textContent = amount > 0 ? sym + amount.toFixed(2) : '--';
   updateAlloc();
 }
 
@@ -1557,18 +1661,21 @@ function updateAlloc() {
   const total = parseFloat(document.getElementById('capital').dataset.total || 0);
   const tradable = total > 0 ? (total * pct / 100) : 0;
   const sizePerTrade = tradable * v / 100;
-  const slots = max; // slot massimi contemporanei
-  const feeReserve = sizePerTrade * 0.012 * slots; // 0.6% entrata + 0.6% uscita * n posizioni
+  const slots = max;
+  const feePct = getFeePct();
+  const feeReserve = sizePerTrade * feePct * 2 * slots; // entrata + uscita * n posizioni
   const netCapital = tradable - feeReserve;
   const netPerTrade = netCapital * v / 100;
+  const sym = getCurrSym();
+  const exchangeName = (_hasRevxKeys && !_simMode) ? 'Revolut X (0.09%)' : 'Coinbase (0.6%)';
 
   const hint = document.getElementById('allocHint');
   if (tradable > 0) {
     hint.innerHTML =
-      'Max ' + max + ' posizioni · <strong>$' + netPerTrade.toFixed(2) + '</strong> per trade' +
-      '<br><span style="color:var(--text3);font-size:10px">Capitale: $' + tradable.toFixed(2) +
-      ' · Fee stimate: <span style="color:var(--red)">−$' + feeReserve.toFixed(2) + '</span>' +
-      ' · Netto: $' + netCapital.toFixed(2) + '</span>';
+      'Max ' + max + ' posizioni · <strong>' + sym + netPerTrade.toFixed(2) + '</strong> per trade' +
+      '<br><span style="color:var(--text3);font-size:10px">Capitale: ' + sym + tradable.toFixed(2) +
+      ' · Fee ' + exchangeName + ': <span style="color:var(--red)">−' + sym + feeReserve.toFixed(2) + '</span>' +
+      ' · Netto: ' + sym + netCapital.toFixed(2) + '</span>';
   } else {
     hint.innerHTML = 'Max ' + max + ' posizioni · configura il capitale per vedere le fee';
   }
@@ -1630,30 +1737,30 @@ async function setMode(real) {
   const capitalInput = document.getElementById('capital');
   if (real) {
     simBtn.classList.remove('active-sim'); realBtn.classList.add('active-real');
-    hint.textContent = 'Recupero saldo Coinbase...'; hint.style.color = 'var(--yellow)';
+    hint.textContent = 'Recupero saldo...'; hint.style.color = 'var(--yellow)';
     capitalInput.disabled = false;
     try {
       const r = await fetch(API + '/test_coinbase', { headers: authHeaders() });
       const d = await r.json();
       if (d.ok) {
-        const usdc = d.balances.find(b => b.currency === 'USDC');
-        const bal = usdc ? parseFloat(usdc.available) : 0;
+        const usdc = d.balances.find(b => b.currency === 'USDC/USD' || b.currency === 'USDC' || b.currency === 'USD');
+        const bal = d.usdc_tradable || (usdc ? parseFloat(usdc.available) : 0);
         const suggested = parseFloat((bal * 0.98).toFixed(2));
-        document.getElementById('totalBalanceDisplay').textContent = '$' + bal.toFixed(2) + ' USDC disponibili';
+        document.getElementById('totalBalanceDisplay').textContent = getCurrSym() + bal.toFixed(2) + ' disponibili';
         document.getElementById('totalBalanceDisplay').style.color = 'var(--green)';
         capitalInput.value = suggested; capitalInput.dataset.total = bal;
-        document.getElementById('capitalDisplay').textContent = '$' + suggested;
-        hint.textContent = 'Saldo USDC: $' + bal.toFixed(2) + ' — ordini reali su Coinbase';
+        document.getElementById('capitalDisplay').textContent = getCurrSym() + suggested;
+        hint.textContent = getCurrSym() + bal.toFixed(2) + ' disponibili';
         hint.style.color = 'var(--red)'; updateAlloc();
       } else {
-        hint.textContent = 'Errore Coinbase: ' + (d.error || 'sconosciuto'); hint.style.color = 'var(--red)';
+        hint.textContent = 'Errore connessione: ' + (d.error || 'sconosciuto'); hint.style.color = 'var(--red)';
       }
     } catch(e) { hint.textContent = 'Errore: ' + e.message; hint.style.color = 'var(--red)'; }
   } else {
     realBtn.classList.remove('active-real'); simBtn.classList.add('active-sim');
     hint.textContent = 'Nessun ordine reale verra eseguito'; hint.style.color = '';
     capitalInput.disabled = false; capitalInput.value = 1000; capitalInput.dataset.total = 0;
-    document.getElementById('capitalDisplay').textContent = '$1,000';
+    document.getElementById('capitalDisplay').textContent = '$1,000'; // simulazione
     document.getElementById('totalBalanceDisplay').textContent = 'Modalita simulazione';
     document.getElementById('totalBalanceDisplay').style.color = '';
     updateAlloc();
@@ -1672,8 +1779,8 @@ async function startAgent() {
   const total = parseFloat(document.getElementById('capital').dataset.total || 0);
   const isReal = _hasApiKeys && !_simMode;
   const capitalVal = total > 0 ? parseFloat((total * capitalPctVal / 100).toFixed(2)) : (isReal ? 0 : 1000);
-  if (isReal && capitalVal <= 0) { alert('Saldo Coinbase non ancora caricato. Attendi qualche secondo e riprova.'); return; }
-  if (capitalVal > 1000000) { alert('Capitale troppo alto (max $1,000,000).'); return; }
+  if (isReal && capitalVal <= 0) { alert('Saldo non ancora caricato. Attendi qualche secondo e riprova.'); return; }
+  if (capitalVal > 1000000) { alert('Capitale troppo alto (max 1,000,000).'); return; }
   const cfg = {
     capital:               capitalVal,
     capitalPct:            capitalPctVal / 100,
@@ -1870,15 +1977,15 @@ function render() {
   // PnL banner
   const pnl = S.pnl || 0;
   const pnlEl = document.getElementById('sessPnl');
-  pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
+  pnlEl.textContent = (pnl >= 0 ? '+' : '') + getCurrSym() + pnl.toFixed(2);
   pnlEl.style.color = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
 
   // KPI capitale — il backend restituisce già pnl = total - capital
   const cap = (S.capital||0) + pnl;
   const capEl = document.getElementById('kpiCapital');
-  capEl.textContent = '$' + cap.toFixed(2);
+  capEl.textContent = getCurrSym() + cap.toFixed(2);
   capEl.className = 'kpi-value' + (pnl > 0 ? ' up' : pnl < 0 ? ' down' : '');
-  document.getElementById('kpiCapSub').textContent = window._realMode ? 'reale Coinbase' : 'simulato';
+  document.getElementById('kpiCapSub').textContent = window._realMode ? (_hasRevxKeys ? 'reale Revolut X' : 'reale Coinbase') : 'simulato';
 
   // KPI trades
   document.getElementById('kpiTrades').textContent = S.tradeCount || 0;
@@ -1894,11 +2001,11 @@ function render() {
   if (actWrap) {
     if (logs.length > 0 && S.running) {
       actWrap.style.display = 'block';
-      actList.innerHTML = logs.slice(0, 4).map(l => {
-        const time = l.ts ? new Date(l.ts).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}) : (l.time || '');
+      actList.innerHTML = logs.map(l => {
+        const time = l.ts ? new Date(l.ts).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit', second:'2-digit'}) : (l.time || '');
         return `<div class="agent-msg">
           <div class="agent-msg-dot ${l.type}"></div>
-          <div class="agent-msg-text">${l.desc}</div>
+          <div class="agent-msg-text"><strong>${l.label}</strong> ${l.desc}</div>
           <div class="agent-msg-time">${time}</div>
         </div>`;
       }).join('');
@@ -1932,19 +2039,94 @@ function renderHomeSession() {
     const color = isPos ? 'var(--green)' : 'var(--red)';
     const logo = getLogo(p.symbol);
     const img = logo ? `<img src="${logo}" style="width:30px;height:30px;border-radius:50%" onerror="this.style.display='none'">` : `<div style="width:30px;height:30px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text2)">${p.symbol[0]}</div>`;
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:10px">${img}
-        <div>
-          <div style="font-size:14px;font-weight:700">${p.symbol}</div>
-          <div style="font-size:11px;color:var(--text3)">$${p.currentPrice.toFixed(4)}</div>
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:10px">${img}
+          <div>
+            <div style="font-size:14px;font-weight:700">${p.symbol}</div>
+            <div style="font-size:11px;color:var(--text3)">${getCurrSym()}${p.currentPrice.toFixed(4)}</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:15px;font-weight:700;color:${color}">${isPos?'+':''}${getCurrSym()}${pnl.toFixed(2)}</div>
+          <div style="font-size:11px;font-weight:600;color:${color}">${isPos?'+':''}${pct.toFixed(2)}%</div>
         </div>
       </div>
-      <div style="text-align:right">
-        <div style="font-size:15px;font-weight:700;color:${color}">${isPos?'+':''}$${pnl.toFixed(2)}</div>
-        <div style="font-size:11px;font-weight:600;color:${color}">${isPos?'+':''}${pct.toFixed(2)}%</div>
-      </div>
+      <div class="pos-chart-wrap"><canvas class="pos-chart-canvas" id="home-chart-${p.symbol}"></canvas></div>
     </div>`;
   }).join('');
+  // Carica grafici in background
+  pos.forEach(p => {
+    fetchMiniChart(p.symbol).then(closes => {
+      const canvas = document.getElementById('home-chart-' + p.symbol);
+      if (canvas && closes) drawMiniChart(canvas, closes, p.entryPrice);
+    });
+  });
+}
+
+function getPriceSym(pos) {
+  // Usa € per posizioni Revolut X, $ per le altre
+  return pos && pos.exchange === 'revx' ? '€' : '$';
+}
+
+// Cache grafici mini per non ricaricare ad ogni render
+const _miniChartCache = {};
+
+async function fetchMiniChart(sym) {
+  if (_miniChartCache[sym] && Date.now() - _miniChartCache[sym].ts < 60000) {
+    return _miniChartCache[sym].data;
+  }
+  try {
+    const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}USDT&interval=5m&limit=48`);
+    const klines = await r.json();
+    if (!Array.isArray(klines)) return null;
+    const closes = klines.map(k => parseFloat(k[4]));
+    _miniChartCache[sym] = { data: closes, ts: Date.now() };
+    return closes;
+  } catch(e) { return null; }
+}
+
+function drawMiniChart(canvas, closes, entryPrice) {
+  if (!canvas || !closes || closes.length < 2) return;
+  const w = canvas.offsetWidth || 200;
+  const h = 60;
+  canvas.width = w * window.devicePixelRatio;
+  canvas.height = h * window.devicePixelRatio;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const min = Math.min(...closes) * 0.9995;
+  const max = Math.max(...closes) * 1.0005;
+  const range = max - min || 1;
+  const px = (v) => h - ((v - min) / range) * h;
+  const lastClose = closes[closes.length - 1];
+  const isUp = lastClose >= entryPrice;
+  const color = isUp ? '#16c784' : '#ea3943';
+  // Linea entry price
+  const entryY = px(entryPrice);
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = 'rgba(150,150,150,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, entryY); ctx.lineTo(w, entryY); ctx.stroke();
+  ctx.setLineDash([]);
+  // Gradiente riempimento
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, color + '33');
+  grad.addColorStop(1, color + '00');
+  const step = w / (closes.length - 1);
+  ctx.beginPath();
+  ctx.moveTo(0, px(closes[0]));
+  closes.forEach((v, i) => ctx.lineTo(i * step, px(v)));
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+  // Linea prezzo
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.moveTo(0, px(closes[0]));
+  closes.forEach((v, i) => ctx.lineTo(i * step, px(v)));
+  ctx.stroke();
 }
 
 function renderPositions() {
@@ -1979,24 +2161,32 @@ function renderPositions() {
           </div>
         </div>
         <div class="pos-pnl">
-          <div class="pos-pnl-val" style="color:${color}">${isPos?'+':''}$${pnl.toFixed(2)}</div>
+          <div class="pos-pnl-val" style="color:${color}">${isPos?'+':''}${getCurrSym()}${pnl.toFixed(2)}</div>
           <div class="pos-pnl-pct" style="color:${color}">${isPos?'+':''}${pct.toFixed(2)}%</div>
         </div>
       </div>
       <div class="pos-divider"></div>
       <div class="pos-data">
-        <div class="pos-cell"><div class="pos-cell-label">Entrata</div><div class="pos-cell-value">$${p.entryPrice.toFixed(4)}</div></div>
-        <div class="pos-cell"><div class="pos-cell-label">Corrente</div><div class="pos-cell-value">$${p.currentPrice.toFixed(4)}</div></div>
-        <div class="pos-cell" style="border-top:1px solid var(--border)"><div class="pos-cell-label">Stop${tp1Hit?' (BE)':''}</div><div class="pos-cell-value" style="color:var(--red)">$${p.stopPrice.toFixed(4)}</div></div>
-        <div class="pos-cell" style="border-top:1px solid var(--border)"><div class="pos-cell-label">${tp1Hit?'TP2':'TP1'}</div><div class="pos-cell-value" style="color:var(--green)">$${(tp1Hit?tp2Price:tp1Price).toFixed(4)}</div></div>
+        <div class="pos-cell"><div class="pos-cell-label">Entrata</div><div class="pos-cell-value">${getPriceSym(p)}${p.entryPrice.toFixed(4)}</div></div>
+        <div class="pos-cell"><div class="pos-cell-label">Corrente</div><div class="pos-cell-value">${getPriceSym(p)}${p.currentPrice.toFixed(4)}</div></div>
+        <div class="pos-cell" style="border-top:1px solid var(--border)"><div class="pos-cell-label">Stop${tp1Hit?' (BE)':''}</div><div class="pos-cell-value" style="color:var(--red)">${getPriceSym(p)}${p.stopPrice.toFixed(4)}</div></div>
+        <div class="pos-cell" style="border-top:1px solid var(--border)"><div class="pos-cell-label">${tp1Hit?'TP2':'TP1'}</div><div class="pos-cell-value" style="color:var(--green)">${getPriceSym(p)}${(tp1Hit?tp2Price:tp1Price).toFixed(4)}</div></div>
       </div>
       <div class="pos-progress-wrap">
         <div class="pos-progress-labels"><span>SL</span><span>${pct.toFixed(2)}%</span><span>${tp1Hit?'TP2':'TP1'}</span></div>
         <div class="pos-bar"><div class="pos-bar-fill" style="width:${progress}%;background:${barColor}"></div></div>
       </div>
+      <div class="pos-chart-wrap"><canvas class="pos-chart-canvas" id="chart-${p.symbol}"></canvas></div>
       <button class="close-btn" onclick="closePosition('${p.symbol}')">Chiudi posizione</button>
     </div>`;
   }).join('');
+  // Carica grafici mini in background
+  pos.forEach(p => {
+    fetchMiniChart(p.symbol).then(closes => {
+      const canvas = document.getElementById('chart-' + p.symbol);
+      if (canvas && closes) drawMiniChart(canvas, closes, p.entryPrice);
+    });
+  });
 }
 
 async function closePosition(symbol) {
@@ -2083,7 +2273,7 @@ function renderTransazioni() {
   document.getElementById('txCount').textContent = filtered.length;
   document.getElementById('txWinRate').textContent = filtered.length > 0 ? wr + '%' : '--%';
   document.getElementById('txWinRate').style.color = wr >= 50 ? 'var(--green)' : wr > 0 ? 'var(--red)' : '';
-  document.getElementById('txPnl').textContent = 'P&L: ' + (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+  document.getElementById('txPnl').textContent = 'P&L: ' + (totalPnl >= 0 ? '+' : '') + getCurrSym() + totalPnl.toFixed(2);
   document.getElementById('txPnl').style.color = totalPnl > 0 ? 'var(--green)' : totalPnl < 0 ? 'var(--red)' : '';
   document.getElementById('txWinLoss').textContent = wins + ' vittorie · ' + losses + ' sconfitte';
 
@@ -2119,18 +2309,18 @@ function renderTransazioni() {
           </div>
         </div>
         <div style="text-align:right">
-          <div style="font-weight:700;font-size:15px;color:${color}">${isWin?'+':''}$${t.pnl.toFixed(2)}</div>
+          <div style="font-weight:700;font-size:15px;color:${color}">${isWin?'+':''}${getCurrSym()}${t.pnl.toFixed(2)}</div>
           <div style="font-size:12px;font-weight:600;color:${color}">${isWin?'+':''}${t.pct.toFixed(2)}%</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <div style="background:var(--surface3);border-radius:8px;padding:8px;text-align:center">
           <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:3px">ENTRATA</div>
-          <div style="font-size:12px;font-weight:600">$${t.entryPrice.toFixed(4)}</div>
+          <div style="font-size:12px;font-weight:600">${t.exchange === 'revx' ? '€' : '$'}${t.entryPrice.toFixed(4)}</div>
         </div>
         <div style="background:var(--surface3);border-radius:8px;padding:8px;text-align:center">
           <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:3px">USCITA</div>
-          <div style="font-size:12px;font-weight:600">$${t.exitPrice.toFixed(4)}</div>
+          <div style="font-size:12px;font-weight:600">${t.exchange === 'revx' ? '€' : '$'}${t.exitPrice.toFixed(4)}</div>
         </div>
       </div>
     </div>`;
@@ -2273,7 +2463,8 @@ function setMktFilterDropdown(val) {
 }
 
 function fmtVol(v) { if(v>=1e9) return (v/1e9).toFixed(1)+'B'; if(v>=1e6) return (v/1e6).toFixed(0)+'M'; return (v/1e3).toFixed(0)+'K'; }
-function fmtPrice(p) { if(p>=1000) return '$'+p.toLocaleString('en-US',{maximumFractionDigits:0}); if(p>=1) return '$'+p.toFixed(2); if(p>=0.01) return '$'+p.toFixed(4); return '$'+p.toFixed(6); }
+function fmtPrice(p, sym='$') { if(p>=1000) return sym+p.toLocaleString('en-US',{maximumFractionDigits:0}); if(p>=1) return sym+p.toFixed(2); if(p>=0.01) return sym+p.toFixed(4); return sym+p.toFixed(6); }
+
 
 function renderMarket() {
   let data = [...mktData];
@@ -2322,7 +2513,7 @@ function renderMarket() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="${_watchlist.has(c.symbol)?'currentColor':'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               </button>
             </div>
-            <div class="mkt-sym-sub">${c.symbol} &middot; Vol $${fmtVol(vol)}</div>
+            <div class="mkt-sym-sub">${c.symbol} &middot; Vol ${getCurrSym()}${fmtVol(vol)}</div>
             ${emaDots}
           </div>
         </div>
@@ -2418,7 +2609,7 @@ async function loadHomeBalance() {
   const tagEl = document.getElementById('homeModeTag');
   if (!valEl) return;
 
-  const isReal = _hasApiKeys && !_simMode;
+  const isReal = (_hasApiKeys || _hasRevxKeys) && !_simMode;
 
   if (tagEl) {
     tagEl.textContent = isReal ? 'Modalità Reale' : 'Simulazione';
@@ -2427,31 +2618,51 @@ async function loadHomeBalance() {
 
   if (isReal) {
     valEl.textContent = '...';
-    subEl.textContent = 'Recupero saldo Coinbase';
-    try {
-      const r = await fetch(API + '/test_coinbase', { headers: authHeaders() });
-      const d = await r.json();
-      if (d.ok) {
-        const usdc = d.balances.find(b => b.currency === 'USDC');
-        const bal = usdc ? parseFloat(usdc.available) : 0;
-        valEl.textContent = '$' + bal.toFixed(2);
-        subEl.textContent = 'USDC disponibili su Coinbase';
-        const tbd = document.getElementById('totalBalanceDisplay');
-        if (tbd) { tbd.textContent = '$' + bal.toFixed(2) + ' USDC'; tbd.style.color = 'var(--green)'; }
-        // Salva il saldo totale come riferimento per lo slider capitalPct
-        const cap = document.getElementById('capital');
-        if (cap) cap.dataset.total = bal;
-        updateCapitalPct();
-      } else {
-        valEl.textContent = '--';
-        subEl.textContent = 'Errore Coinbase';
-      }
-    } catch(e) {
-      valEl.textContent = '--';
-      subEl.textContent = 'Connessione fallita';
+    if (_hasRevxKeys) {
+      // Revolut X ha la precedenza
+      subEl.textContent = 'Recupero saldo Revolut X';
+      try {
+        const r = await fetch(API + '/test_revx', { headers: authHeaders() });
+        const d = await r.json();
+        if (d.ok && d.balances && d.balances.length > 0) {
+          const eur = d.balances.find(b => b.currency === 'EUR');
+          const usd = d.balances.find(b => b.currency === 'USD' || b.currency === 'USDC');
+          const best = eur || usd || d.balances[0];
+          const bal = parseFloat(best.available);
+          const sym = best.currency;
+          valEl.textContent = (sym === 'EUR' ? '€' : '$') + bal.toFixed(2);
+          subEl.textContent = sym + ' disponibili su Revolut X';
+          const tbd = document.getElementById('totalBalanceDisplay');
+          if (tbd) { tbd.textContent = bal.toFixed(2) + ' ' + sym + ' (Revolut X)'; tbd.style.color = 'var(--green)'; }
+          const cap = document.getElementById('capital');
+          if (cap) cap.dataset.total = bal;
+          updateCapitalPct();
+        } else {
+          valEl.textContent = '--'; subEl.textContent = 'Errore Revolut X';
+        }
+      } catch(e) { valEl.textContent = '--'; subEl.textContent = 'Connessione fallita'; }
+    } else {
+      subEl.textContent = 'Recupero saldo...';
+      try {
+        const r = await fetch(API + '/test_coinbase', { headers: authHeaders() });
+        const d = await r.json();
+        if (d.ok) {
+          const usdc = d.balances.find(b => b.currency === 'USDC/USD' || b.currency === 'USDC' || b.currency === 'USD');
+          const bal = d.usdc_tradable || (usdc ? parseFloat(usdc.available) : 0);
+          valEl.textContent = '$' + bal.toFixed(2); // Coinbase fallback
+          subEl.textContent = 'USDC disponibili';
+          const tbd = document.getElementById('totalBalanceDisplay');
+          if (tbd) { tbd.textContent = '$' + bal.toFixed(2) + ' USDC'; tbd.style.color = 'var(--green)'; }
+          const cap = document.getElementById('capital');
+          if (cap) cap.dataset.total = bal;
+          updateCapitalPct();
+        } else {
+          valEl.textContent = '--'; subEl.textContent = 'Errore connessione';
+        }
+      } catch(e) { valEl.textContent = '--'; subEl.textContent = 'Connessione fallita'; }
     }
   } else {
-    valEl.textContent = '$1,000';
+    valEl.textContent = '€1,000'; // simulazione
     subEl.textContent = 'Saldo simulato';
     const tbd = document.getElementById('totalBalanceDisplay');
     if (tbd) { tbd.textContent = 'Simulazione — $1,000'; tbd.style.color = ''; }
