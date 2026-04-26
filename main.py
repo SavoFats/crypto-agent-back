@@ -478,6 +478,7 @@ STABLES = {'USDT','USDC','BUSD','DAI','FDUSD','TUSD','USDP','GUSD','FRAX',
 _coinbase_products: dict = {}
 _global_revx_key_id: str = ""
 _global_revx_private_key: str = ""
+_revx_pairs: set = set()  # simboli disponibili su Revolut X es. {"BTC", "ETH", "ADA"}
 _products_last_update: float = 0
 
 REVX_BASE_PUB = "https://revx.revolut.com"
@@ -1280,6 +1281,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
             and d.get("volume24h", 0) >= min_vol
             and sym not in open_syms
             and (use_revx_filter or sym in _coinbase_products)
+            and (not use_revx_filter or not _revx_pairs or sym in _revx_pairs)
             and sym in candle_data
             and (state["cooldowns"].get(sym, 0) < datetime.now().timestamp() * 1000)
         ]
@@ -1526,12 +1528,12 @@ async def startup():
     asyncio.create_task(load_global_revx_keys())
 
 async def load_global_revx_keys():
-    """Carica le chiavi RevX del primo utente configurato per usarle nel fetch_prices."""
-    global _global_revx_key_id, _global_revx_private_key
+    """Carica le chiavi RevX e le coppie disponibili all'avvio."""
+    global _global_revx_key_id, _global_revx_private_key, _revx_pairs
     if not db_pool:
         return
     try:
-        await asyncio.sleep(3)  # Aspetta che il DB sia pronto
+        await asyncio.sleep(3)
         async with db_pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT revx_key_id, revx_private_key FROM users WHERE revx_key_id != '' AND sim_mode = FALSE ORDER BY id LIMIT 1"
@@ -1539,9 +1541,33 @@ async def load_global_revx_keys():
         if row and row["revx_key_id"]:
             _global_revx_key_id = decrypt_key(row["revx_key_id"])
             _global_revx_private_key = decrypt_key(row["revx_private_key"])
-            print(f"[REVX] Chiavi globali caricate per market data")
+            print(f"[REVX] Chiavi globali caricate")
+            # Carica coppie disponibili
+            await refresh_revx_pairs(_global_revx_key_id, _global_revx_private_key)
     except Exception as e:
         print(f"[REVX] Errore caricamento chiavi globali: {e}")
+
+async def refresh_revx_pairs(key_id: str, private_key: str):
+    """Carica e aggiorna le coppie EUR disponibili su Revolut X."""
+    global _revx_pairs
+    if not key_id or not private_key:
+        return
+    try:
+        data = await revx_request("GET", "/api/1.0/tickers",
+                                   key_id=key_id, private_key=private_key, params={})
+        tickers = data.get("data", []) if isinstance(data, dict) else data
+        pairs = set()
+        for t in (tickers if isinstance(tickers, list) else []):
+            symbol = t.get("symbol", "")
+            if symbol.endswith("/EUR"):
+                pairs.add(symbol[:-4])  # es. "BTC/EUR" -> "BTC"
+        if pairs:
+            _revx_pairs = pairs
+            print(f"[REVX] {len(pairs)} coppie EUR disponibili: {sorted(pairs)[:10]}...")
+        else:
+            print(f"[REVX] nessuna coppia EUR trovata, risposta: {str(data)[:200]}")
+    except Exception as e:
+        print(f"[REVX] errore caricamento coppie: {e}")
 
 async def restore_sessions_from_db(pool):
     """Ripristina sessioni attive salvate nel DB dopo un riavvio."""
@@ -1933,7 +1959,7 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
     curr_sym = "€" if use_revx else "$"
     exchange_name = "Revolut X" if use_revx else ("Coinbase" if cb_key else "SIM")
     add_log(state, "info", "AVVIO",
-        f"{curr_sym}{capital:.0f} | {mode} [{exchange_name}] | Cap: {capp:.0f}% | Alloc: {alloc:.0f}% | "
+        f"{curr_sym}{capital:.2f} | {mode} [{exchange_name}] | Cap: {capp:.0f}% | Alloc: {alloc:.0f}% | "
         f"EMA: {ema_s} | Trend1h: {t1h_s} | RSI: {rsi_s} | "
         f"TP2: {tp2r}R | Trailing: {trl_s} | MaxLoss: {mcl}"
     )
