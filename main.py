@@ -158,6 +158,27 @@ def make_revx_signature(api_key_id: str, private_key_pem: str, method: str, path
 
 REVX_BASE = "https://revx.revolut.com"
 
+_eur_usd_rate: float = 1.08  # tasso di fallback
+_eur_usd_last_update: float = 0.0
+
+async def get_eur_usd_rate() -> float:
+    """Recupera tasso EUR/USD da API pubblica. Aggiorna ogni 5 minuti."""
+    global _eur_usd_rate, _eur_usd_last_update
+    import time as _time
+    if _time.time() - _eur_usd_last_update < 300:
+        return _eur_usd_rate
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get("https://api.frankfurter.app/latest?from=EUR&to=USD")
+            data = r.json()
+            rate = float(data["rates"]["USD"])
+            _eur_usd_rate = rate
+            _eur_usd_last_update = _time.time()
+            print(f"[EUR/USD] tasso aggiornato: {rate}")
+    except Exception as e:
+        print(f"[EUR/USD] errore: {e}, uso fallback {_eur_usd_rate}")
+    return _eur_usd_rate
+
 async def revx_request(method: str, path: str, body: dict = None,
                         key_id: str = None, private_key: str = None,
                         params: dict = None) -> dict:
@@ -589,54 +610,12 @@ async def fetch_prices():
             for state in user_sessions.values():
                 for pos in state["positions"]:
                     if pos["symbol"] == sym:
-                        # NON aggiornare con prezzo USD le posizioni RevX
-                        # Il prezzo EUR viene aggiornato dopo nell'overlay RevX
-                        if pos.get("exchange") == "revx":
-                            continue
                         pos["currentPrice"] = price
                         if price > pos["highPrice"]:
                             pos["highPrice"] = price
 
-        # Overlay con dati Revolut X in EUR se disponibili
-        try:
-            # Usa chiavi sessione attiva, altrimenti chiavi globali caricate all'avvio
-            revx_key_id, revx_priv_key = _global_revx_key_id, _global_revx_private_key
-            for state in user_sessions.values():
-                if state.get("revx_key_id") and state.get("use_revx"):
-                    revx_key_id = state["revx_key_id"]
-                    revx_priv_key = state["revx_private_key"]
-                    break
-            revx_data = await fetch_revx_market_data(revx_key_id, revx_priv_key)
-            for sym, rd in revx_data.items():
-                if sym in market_data and rd["price_eur"] > 0:
-                    market_data[sym]["price_eur"]   = rd["price_eur"]
-                    # Non sovrascrivere change24h — manteniamo quello Binance (più affidabile)
-                    # change24h_eur=0 da RevX ticker (campo non disponibile)
-                    market_data[sym]["symbol_revx"] = rd["symbol_pair"]
-                elif rd["price_eur"] > 0:
-                    # Coin disponibile su Revolut X ma non su Coinbase
-                    market_data[sym] = {
-                        "price": 0.0, "price_eur": rd["price_eur"],
-                        "change1h": 0.0, "change24h": rd["change24h"],
-                        "change24h_eur": rd["change24h"],
-                        "volume24h": rd["volume24h_eur"],
-                        "icon": sym[0], "symbol_revx": rd["symbol_pair"]
-                    }
-            # Aggiorna prezzi posizioni aperte con EUR se use_revx
-            for state in user_sessions.values():
-                if not state.get("use_revx"):
-                    continue
-                for pos in state["positions"]:
-                    sym = pos["symbol"]
-                    rd = revx_data.get(sym)
-                    if rd and rd["price_eur"] > 0:
-                        pos["currentPrice"] = rd["price_eur"]
-                        if rd["price_eur"] > pos["highPrice"]:
-                            pos["highPrice"] = rd["price_eur"]
-        except Exception as e:
-            print(f"[REVX OVERLAY] error: {e}")
-            # In caso di errore, le posizioni RevX mantengono l'ultimo currentPrice EUR valido
-            # (non vengono toccate dal loop USD sopra grazie al check exchange==revx)
+        # Nota: prezzi da Binance USDT — usati per segnali tecnici (EMA, RSI)
+        # Gli ordini RevX usano quote_size EUR, quindi il prezzo USD non influisce sull'esecuzione
 
     except Exception as e:
         print(f"Fetch error: {e}")
@@ -790,32 +769,36 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
             try:
                 symbol_revx = f"{sym}-EUR"
                 import uuid as _uuid
+                # Converti size USD in EUR per l'ordine RevX
+                eur_usd = await get_eur_usd_rate()
+                size_eur = round(size / eur_usd, 2)
                 order_body = {
                     "client_order_id": str(_uuid.uuid4()),
                     "symbol": symbol_revx,
                     "side": "BUY",
-                    "order_configuration": {"market": {"quote_size": str(round(size, 2))}}
+                    "order_configuration": {"market": {"quote_size": str(size_eur)}}
                 }
-                add_log(state, "info", "DEBUG", f"Ordine RevX {symbol_revx} size=€{size:.2f}")
+                add_log(state, "info", "DEBUG", f"Ordine RevX {symbol_revx} size=${size:.2f} (€{size_eur:.2f} @ {eur_usd:.4f})")
                 result = await revx_request("POST", "/api/1.0/orders", order_body, key_id=revx_key_id, private_key=revx_priv)
                 print(f"[REVX ORDER RESULT] {sym}: {result}")
-                # Revolut X risponde con {"data": {"venue_order_id": ..., "client_order_id": ...}}
                 data = result.get("data") or result
                 order_id = data.get("venue_order_id") or data.get("order_id") or data.get("id", "")
-                # Se non c'è order_id e c'è un errore esplicito, fallisce
                 if not order_id:
                     err_msg = result.get("message") or result.get("error") or result.get("detail") or str(result)
                     add_log(state, "info", "ERRORE", f"Ordine RevX {sym} fallito: {err_msg}")
                     await send_telegram(f"ERRORE ORDINE RevX {sym}: {err_msg[:100]}")
                     return
-                actual_price = float(data.get("average_price") or data.get("price") or price)
+                # Tutto in USD: qty = size_usd / price_usd (Binance)
+                # Coerente con currentPrice, stopPrice, tp1Price che sono tutti USD
+                actual_price = price  # prezzo Binance USD al momento dell'ordine
                 qty_purchased = size / actual_price if actual_price > 0 else 0.0
+                print(f"[REVX BUY] qty={qty_purchased:.6f} @ ${actual_price:.4f} USD (size_eur={size_eur:.2f})")
                 stop_price  = actual_price * (1 - R_pct)
                 tp1_price   = actual_price * (1 + R_pct)
                 tp2_price   = actual_price * (1 + R_pct * tp2_multiplier)
                 add_log(state, "buy", "ACQUISTO REALE (RevX)",
-                    f"{sym} @ {fmt_price(actual_price)} | Size: €{size:.0f} | Qty: {qty_purchased:.6f} | "
-                    f"SL: {fmt_price(stop_price)} | TP1: {fmt_price(tp1_price)} | TP2: {fmt_price(tp2_price)} | R: {R_pct*100:.2f}%")
+                    f"{sym} @ €{actual_price:.4f} | Size: €{size:.0f} | Qty: {qty_purchased:.6f} | "
+                    f"SL: €{stop_price:.4f} | TP1: €{tp1_price:.4f} | TP2: €{tp2_price:.4f} | R: {R_pct*100:.2f}%")
                 await send_telegram(f"ACQUISTO REALE RevX\n{sym} @ €{actual_price:.4f}\nSize: €{size:.2f}")
             except Exception as e:
                 add_log(state, "info", "ERRORE", f"RevX error: {e}")
@@ -948,9 +931,35 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
             try:
                 import uuid as _uuid
                 qty_to_sell = round(qty_purchased * 0.5, 8) if partial else round(qty_purchased, 8)
+                symbol_pair = pos.get("symbol_pair", f"{sym}-EUR")
+                # Normalizza: usa sempre formato "SYM-EUR" non "SYM/EUR"
+                symbol_pair = symbol_pair.replace("/", "-")
+                print(f"[REVX SELL] {sym} symbol_pair={symbol_pair} qty_purchased={qty_purchased}")
+                # Leggi saldo reale da RevX per evitare "Insufficient balance"
+                try:
+                    balances = await revx_request("GET", "/api/1.0/balances",
+                                                  key_id=revx_key_id, private_key=revx_priv)
+                    bal_list = balances if isinstance(balances, list) else balances.get("balances", [])
+                    for b in bal_list:
+                        if b.get("currency") == sym:
+                            real_qty = float(b.get("available", 0) or 0)
+                            if real_qty > 0:
+                                # Usa la qty reale su RevX — ignora quella tracciata in USD
+                                qty_to_sell_real = round(real_qty * (0.5 if partial else 1.0), 8)
+                                print(f"[REVX SELL] {sym} qty_tracciata={qty_to_sell:.6f} qty_reale={real_qty:.6f} -> vendo {qty_to_sell_real:.6f}")
+                                qty_to_sell = qty_to_sell_real
+                                pos["qty_purchased"] = real_qty
+                            else:
+                                add_log(state, "info", "WARN", f"{sym}: saldo RevX = 0, posizione rimossa")
+                                if pos in state["positions"]:
+                                    state["positions"].remove(pos)
+                                return
+                            break
+                except Exception as be:
+                    print(f"[REVX SELL] errore lettura saldo: {be}")
                 order_body = {
                     "client_order_id": str(_uuid.uuid4()),
-                    "symbol": pos.get("symbol_pair", f"{sym}-EUR"),
+                    "symbol": symbol_pair,
                     "side": "SELL",
                     "order_configuration": {"market": {"base_size": str(qty_to_sell)}}
                 }
@@ -960,9 +969,17 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
                 order_id = data.get("venue_order_id") or data.get("order_id") or data.get("id", "")
                 if not order_id:
                     err_msg = result.get("message") or result.get("error") or result.get("detail") or str(result)
-                    add_log(state, "info", "ERRORE", f"Vendita RevX {sym} fallita: {err_msg}")
+                    # Conta tentativi falliti consecutivi
+                    pos["_sell_failures"] = pos.get("_sell_failures", 0) + 1
+                    add_log(state, "info", "ERRORE", f"Vendita RevX {sym} fallita ({pos['_sell_failures']}x): {err_msg}")
                     await send_telegram(f"ERRORE VENDITA RevX {sym}: {err_msg[:100]}")
-                    return
+                    # Dopo 3 fallimenti: rimuovi posizione dalla memoria (l'ordine non esiste su RevX)
+                    if pos.get("_sell_failures", 0) >= 3:
+                        add_log(state, "info", "WARN", f"{sym} rimosso dalla memoria dopo 3 vendite fallite — verifica su RevX")
+                        await send_telegram(f"WARN: {sym} rimosso da memoria dopo 3 errori. Verifica saldo su Revolut X.")
+                        # Non fare return — lascia che il codice dopo rimuova la posizione
+                    else:
+                        return
                 filled_price = float(data.get("average_price") or data.get("price") or cur)
                 if filled_price > 0:
                     cur = filled_price
@@ -1121,14 +1138,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
     for pos in list(state["positions"]):
         cur   = pos["currentPrice"]
         entry = pos["entryPrice"]
-        # Sanity check: per posizioni RevX entrambi i prezzi devono essere EUR
-        # Se currentPrice è molto diverso da entryPrice (>50%) probabilmente è un mix USD/EUR
-        if pos.get("exchange") == "revx" and entry > 0:
-            ratio = cur / entry
-            if ratio > 1.5 or ratio < 0.5:
-                # Prezzo anomalo — probabilmente USD invece di EUR, skip questo ciclo
-                print(f"[SANITY] {pos['symbol']} RevX prezzo anomalo: entry={entry:.2f} cur={cur:.2f} ratio={ratio:.2f} — skip")
-                continue
+
         trailing_stop   = cfg.get("trailingStop", True)
         trailing_pct    = cfg.get("trailingPct", 0.5)
 
