@@ -900,10 +900,10 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <!-- Filtri dropdown custom -->
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <div class="fdd" id="fddPeriod">
-        <div class="fdd-btn" onclick="toggleFdd('fddPeriod')" id="fddPeriodBtn">Sempre <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div class="fdd-btn" onclick="toggleFdd('fddPeriod')" id="fddPeriodBtn">Oggi <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
         <div class="fdd-menu" id="fddPeriodMenu">
-          <div class="fdd-item selected" onclick="selectFdd('fddPeriod','all','Sempre','period')">Sempre</div>
-          <div class="fdd-item" onclick="selectFdd('fddPeriod','today','Oggi','period')">Oggi</div>
+          <div class="fdd-item" onclick="selectFdd('fddPeriod','all','Sempre','period')">Sempre</div>
+          <div class="fdd-item selected" onclick="selectFdd('fddPeriod','today','Oggi','period')">Oggi</div>
           <div class="fdd-item" onclick="selectFdd('fddPeriod','week','7 giorni','period')">7 giorni</div>
           <div class="fdd-item" onclick="selectFdd('fddPeriod','month','30 giorni','period')">30 giorni</div>
           <div class="fdd-item" onclick="selectFdd('fddPeriod','6m','6 mesi','period')">6 mesi</div>
@@ -917,15 +917,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
           <div class="fdd-item" onclick="selectFdd('fddOutcome','loss','Perdita','outcome')">Perdita</div>
         </div>
       </div>
-      <div class="fdd" id="fddReason">
-        <div class="fdd-btn" onclick="toggleFdd('fddReason')" id="fddReasonBtn">Motivazione <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-        <div class="fdd-menu" id="fddReasonMenu">
-          <div class="fdd-item selected" onclick="selectFdd('fddReason','all','Motivazione','reason')">Tutte</div>
-          <div class="fdd-item" onclick="selectFdd('fddReason','sl','Stop Loss','reason')">Stop Loss</div>
-          <div class="fdd-item" onclick="selectFdd('fddReason','tp1','Take Profit','reason')">Take Profit</div>
-          <div class="fdd-item" onclick="selectFdd('fddReason','manual','Manuale','reason')">Manuale</div>
-        </div>
-      </div>
+
     </div>
 
     <!-- Lista -->
@@ -2252,7 +2244,7 @@ async function confirmClosePosition() {
 }
 
 // ── FILTRI TRANSAZIONI ───────────────────────────────────────────────────────
-const txFilters = { period: 'all', outcome: 'all', reason: 'all' };
+const txFilters = { period: 'today', outcome: 'all', reason: 'all' };
 
 function setTxDropdown(type, val) {
   txFilters[type] = val;
