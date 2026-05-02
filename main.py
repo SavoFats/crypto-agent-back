@@ -769,7 +769,19 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
                     "order_configuration": {"market": {"quote_size": str(size_eur)}}
                 }
                 add_log(state, "info", "DEBUG", f"Ordine RevX {symbol_revx} size=${size:.2f} (€{size_eur:.2f} @ {eur_usd:.4f})")
-                result = await revx_request("POST", "/api/1.0/orders", order_body, key_id=revx_key_id, private_key=revx_priv)
+                # Retry su errori di rete — max 2 tentativi
+                result = None
+                for attempt in range(2):
+                    try:
+                        result = await revx_request("POST", "/api/1.0/orders", order_body, key_id=revx_key_id, private_key=revx_priv)
+                        break
+                    except Exception as net_err:
+                        if attempt == 0:
+                            print(f"[REVX ORDER] tentativo 1 fallito: {net_err}, riprovo...")
+                            await asyncio.sleep(2)
+                            order_body["client_order_id"] = str(_uuid.uuid4())  # nuovo ID per il retry
+                        else:
+                            raise
                 print(f"[REVX ORDER RESULT] {sym}: {result}")
                 data = result.get("data") or result
                 order_id = data.get("venue_order_id") or data.get("order_id") or data.get("id", "")
@@ -953,7 +965,19 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
                     "side": "SELL",
                     "order_configuration": {"market": {"base_size": str(qty_to_sell)}}
                 }
-                result = await revx_request("POST", "/api/1.0/orders", order_body, key_id=revx_key_id, private_key=revx_priv)
+                # Retry su errori di rete — max 2 tentativi
+                result = None
+                for attempt in range(2):
+                    try:
+                        result = await revx_request("POST", "/api/1.0/orders", order_body, key_id=revx_key_id, private_key=revx_priv)
+                        break
+                    except Exception as net_err:
+                        if attempt == 0:
+                            print(f"[REVX SELL] tentativo 1 fallito: {net_err}, riprovo...")
+                            await asyncio.sleep(2)
+                            order_body["client_order_id"] = str(_uuid.uuid4())
+                        else:
+                            raise
                 print(f"[REVX SELL RESULT] {sym}: {result}")
                 data = result.get("data") or result
                 order_id = data.get("venue_order_id") or data.get("order_id") or data.get("id", "")
