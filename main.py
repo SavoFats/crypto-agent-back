@@ -228,7 +228,7 @@ _sessions_lock = asyncio.Lock()
 candle_data: dict = {}
 _candles_last_update: float = 0
 CANDLE_UPDATE_INTERVAL = 300  # secondi (5 minuti)
-CANDLE_UNIVERSE_SIZE   = 40   # top N coin per volume
+CANDLE_UNIVERSE_SIZE   = 60   # top N coin per volume
 
 def calc_ema(prices: list, period: int) -> float:
     """Calcola EMA su una lista di prezzi (close). Restituisce l'ultimo valore."""
@@ -657,18 +657,6 @@ def unrealized_pnl(state: dict) -> float:
     return total
 
 # ── trading ───────────────────────────────────────────────────────────────────
-
-async def get_revx_eur_balance(key_id: str, private_key: str) -> float:
-    """Legge il saldo EUR disponibile su Revolut X."""
-    try:
-        result = await revx_request("GET", "/api/1.0/balances", key_id=key_id, private_key=private_key)
-        balances = result if isinstance(result, list) else result.get("balances", [])
-        for b in balances:
-            if b.get("currency") == "EUR":
-                return float(b.get("available", 0) or 0)
-    except Exception as e:
-        print(f"[REVX BALANCE] error: {e}")
-    return 0.0
 
 async def get_revx_eur_balance(key_id: str, private_key: str) -> float:
     """Legge il saldo EUR disponibile su Revolut X."""
