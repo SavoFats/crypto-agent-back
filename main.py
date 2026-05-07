@@ -1370,26 +1370,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
     for d in candidates:
         sym = d["symbol"]
         add_log(state, "info", "SEGNALE", f"{sym} | {d.get('ema_reason', 'EMA off')}")
-        # Modalità conferma Telegram: notifica e aspetta /entra
-        if state.get("use_revx") and state.get("realMode") and TELEGRAM_TOKEN:
-            if sym not in _pending_signals:
-                _pending_signals[sym] = {
-                    "state": state,
-                    "user_id": user_id,
-                    "d": d,
-                    "tradable_capital": tradable_capital_net,
-                    "ts": time.time()
-                }
-                price = d.get("price", 0)
-                change1h = d.get("change1h", 0)
-                await send_telegram(
-                    f"SEGNALE {sym}\n"
-                    f"Prezzo: ${price:.4f} | 1h: {change1h:+.2f}%\n"
-                    f"{d.get('ema_reason', '')}\n"
-                    f"Rispondi /entra {sym} per comprare"
-                )
-        else:
-            await enter_position(state, d, tradable_capital_net)
+        await enter_position(state, d, tradable_capital_net)
 
     _update_pnl(state)
 
@@ -1409,11 +1390,6 @@ def _update_pnl(state: dict):
 # ── Telegram polling ──────────────────────────────────────────────────────────
 
 _tg_last_update: int = 0
-
-# Segnali pendenti in attesa di conferma via Telegram
-# { sym: { "state": state, "user_id": uid, "d": market_data, "ts": timestamp } }
-_pending_signals: dict = {}
-
 
 async def poll_telegram():
     global _tg_last_update
@@ -1462,23 +1438,6 @@ async def poll_telegram():
             elif text.upper() == "/STOP" and tg_state:
                 tg_state["running"] = False
                 await send_telegram("Agente fermato via Telegram")
-            elif text.upper().startswith("/ENTRA"):
-                parts = text.split()
-                if len(parts) >= 2:
-                    sym = parts[1].upper()
-                    pending = _pending_signals.get(sym)
-                    if not pending:
-                        await send_telegram(f"Nessun segnale attivo per {sym}")
-                    else:
-                        state = pending["state"]
-                        uid = pending["user_id"]
-                        d = pending["d"]
-                        capital = pending["tradable_capital"]
-                        await send_telegram(f"Esecuzione acquisto {sym}...")
-                        await enter_position(state, d, capital, user_id=uid)
-                        del _pending_signals[sym]
-                else:
-                    await send_telegram("Uso: /entra SYMBOL (es. /entra ICP)")
     except Exception as e:
         print(f"Telegram poll error: {e}")
 
