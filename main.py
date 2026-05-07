@@ -1039,21 +1039,6 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
     pnl = (cur - pos["entryPrice"]) / pos["entryPrice"] * close_size
     pct = (cur - pos["entryPrice"]) / pos["entryPrice"] * 100
 
-    # Per RevX: ricalcola pnl in EUR reali usando entry_eur
-    if pos.get("exchange") == "revx" and pos.get("entry_eur"):
-        try:
-            eur_usd = await get_eur_usd_rate()
-            qty_total = pos.get("qty_purchased", 0) + (pos.get("qty_tp1_sold", 0) or 0)
-            entry_eur_total = pos["entry_eur"]
-            # EUR proporzionale alla quota che stiamo vendendo
-            proportion = qty_to_sell / qty_total if qty_total > 0 else 0.5
-            entry_eur_part = entry_eur_total * proportion
-            exit_eur = qty_to_sell * cur / eur_usd
-            pnl = exit_eur - entry_eur_part
-            pct = (pnl / entry_eur_part) * 100 if entry_eur_part > 0 else 0
-        except Exception:
-            pass  # fallback al calcolo USD
-
     # Fee di uscita: 0.60% sul valore liquidato (applicata sempre per riflettere realtà)
     fee_pct = pos.get("fee_pct", 0.006)
     exit_fee = close_size * fee_pct
