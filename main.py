@@ -599,7 +599,7 @@ async def fetch_prices():
                     price = float(t["lastPrice"])
                     change24h = float(t["priceChangePercent"])
                     vol_usd = float(t["quoteVolume"])
-                except:
+                except (ValueError, TypeError):
                     continue
             else:
                 continue
@@ -2393,7 +2393,7 @@ async def debug_coinbase(user_id: int = Depends(get_current_user)):
         return {"error": str(e)}
 
 @app.get("/logos")
-async def get_logos():
+async def get_logos(user_id: int = Depends(get_current_user)):
     LOGO_URLS = {
         "BTC":"https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
         "ETH":"https://assets.coingecko.com/coins/images/279/small/ethereum.png",
