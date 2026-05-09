@@ -126,6 +126,9 @@ async def send_telegram_to(chat_id: str, msg: str):
     """Invia un messaggio Telegram a uno specifico chat_id."""
     if not TELEGRAM_TOKEN or not chat_id:
         return
+    import traceback
+    caller = ''.join(traceback.format_stack()[-3:-1]).strip().replace('\n', ' | ')
+    print(f"[TG SEND] chat={chat_id} msg={msg[:60]!r} | from: {caller[-120:]}")
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             await client.post(
