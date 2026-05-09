@@ -1421,10 +1421,16 @@ async def poll_telegram():
                     params={"offset": _tg_last_update + 1, "timeout": 0}
                 )
                 data = r.json()
-            for update in data.get("result", []):
+            results = data.get("result", [])
+            if results:
+                print(f"[TG] poll: {len(results)} update(s), ids={[u['update_id'] for u in results]}, last_known={_tg_last_update}")
+            for update in results:
                 uid_upd = update["update_id"]
                 _tg_last_update = uid_upd
+                msg_text = update.get("message", {}).get("text", "")
+                print(f"[TG] update_id={uid_upd} cmd={msg_text!r}")
                 if uid_upd in _tg_processed_ids:
+                    print(f"[TG] skip {uid_upd}: in-memory dup")
                     continue
                 # Deduplication DB: garantisce un solo processo per update anche con più istanze
                 if db_pool:
@@ -1435,9 +1441,11 @@ async def poll_telegram():
                                 uid_upd
                             )
                         if inserted is None:
-                            continue  # già processato da un'altra istanza
-                    except Exception:
-                        pass
+                            print(f"[TG] skip {uid_upd}: DB dup")
+                            continue
+                    except Exception as db_err:
+                        print(f"[TG] DB check error: {db_err}")
+                print(f"[TG] processing {uid_upd}: {msg_text!r}")
                 _tg_processed_ids.add(uid_upd)
                 if len(_tg_processed_ids) > 500:
                     _tg_processed_ids.discard(min(_tg_processed_ids))
