@@ -1599,7 +1599,8 @@ async def persist_sessions():
             print(f"Errore persist sessione user {uid}: {e}")
 
 async def telegram_loop():
-    """Loop separato per Telegram — non blocca il trading se Telegram è lento."""
+    """Loop separato per Telegram. Attende 20s all'avvio per dare tempo al vecchio container Railway di spegnersi (rolling deploy)."""
+    await asyncio.sleep(20)
     while True:
         try:
             await poll_telegram()
