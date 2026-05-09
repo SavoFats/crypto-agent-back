@@ -745,7 +745,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
     <div class="section-label">Gestione Rischio</div>
 
     <div class="field">
-      <div class="field-label">Volume minimo universe <span id="volVal">€0M</span></div>
+      <div class="field-label">Volume minimo universe <span id="volVal">$0M</span></div>
       <input type="range" id="minVolume" min="0" max="500" value="0" step="1"
         oninput="document.getElementById('volVal').textContent=getCurrSym()+this.value+'M'">
       <div class="field-hint">Coin con volume inferiore vengono escluse dall'universo</div>
@@ -1856,7 +1856,7 @@ async function poll() {
     const [sRes, tRes, mRes] = await Promise.all([
       fetch(API + '/status', { headers:authHeaders() }),
       fetch(API + '/trades', { headers:authHeaders() }),
-      fetch(API + '/market'),
+      fetch(API + '/market', { headers:authHeaders() }),
     ]);
     // Se il token è scaduto, fai logout automatico
     if (sRes.status === 401) {
@@ -2093,8 +2093,7 @@ function renderHomeSession() {
 }
 
 function getPriceSym(pos) {
-  // Usa € per posizioni Revolut X, $ per le altre
-  return pos && pos.exchange === 'revx' ? '$' : '$';
+  return '$';
 }
 
 // Cache grafici mini per non ricaricare ad ogni render
@@ -2205,7 +2204,7 @@ function renderPositions() {
         <div class="pos-bar"><div class="pos-bar-fill" style="width:${progress}%;background:${barColor}"></div></div>
       </div>
       <div class="pos-chart-wrap"><canvas class="pos-chart-canvas" id="chart-${p.symbol}"></canvas></div>
-      <button class="close-btn" onclick="closePosition('${p.symbol}')">Chiudi posizione</button>
+      <button class="close-btn" data-close-sym="${p.symbol}" onclick="closePosition(this.dataset.closeSym)">Chiudi posizione</button>
     </div>`;
   }).join('');
   // Carica grafici mini in background
@@ -2344,11 +2343,11 @@ function renderTransazioni() {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <div style="background:var(--surface3);border-radius:8px;padding:8px;text-align:center">
           <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:3px">ENTRATA</div>
-          <div style="font-size:12px;font-weight:600">${t.exchange === 'revx' ? '€' : '$'}${t.entryPrice.toFixed(4)}</div>
+          <div style="font-size:12px;font-weight:600">$${t.entryPrice.toFixed(4)}</div>
         </div>
         <div style="background:var(--surface3);border-radius:8px;padding:8px;text-align:center">
           <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:3px">USCITA</div>
-          <div style="font-size:12px;font-weight:600">${t.exchange === 'revx' ? '€' : '$'}${t.exitPrice.toFixed(4)}</div>
+          <div style="font-size:12px;font-weight:600">$${t.exitPrice.toFixed(4)}</div>
         </div>
       </div>
     </div>`;
@@ -2650,7 +2649,7 @@ async function loadHomeBalance() {
       } catch(e) { valEl.textContent = '--'; subEl.textContent = 'Connessione fallita'; }
     }
   } else {
-    valEl.textContent = '€1,000'; // simulazione
+    valEl.textContent = '$1,000'; // simulazione
     subEl.textContent = 'Saldo simulato';
     const tbd = document.getElementById('totalBalanceDisplay');
     if (tbd) { tbd.textContent = 'Simulazione — $1,000'; tbd.style.color = ''; }
@@ -2845,7 +2844,7 @@ function closeDrawer() {
 
 async function refreshMarket() {
   try {
-    const r = await fetch(API + '/market');
+    const r = await fetch(API + '/market', { headers: authHeaders() });
     const d = await r.json();
     mktData = d.market || [];
     // universeCount rimosso dall'header
