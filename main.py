@@ -1238,20 +1238,19 @@ async def scan_and_trade(state: dict, user_id: int = None):
         # Sim: usa currentCapital (già aggiornato dopo ogni trade)
         tradable_capital = state["currentCapital"] * capital_pct
 
-    # Soglia minima: ferma solo se non ci sono posizioni aperte e il saldo USDC è davvero esaurito
-    # Se ci sono posizioni aperte il capitale è "bloccato" in crypto — non è perso
-    min_tradable = max(1.0, state["capital"] * alloc_pct * capital_pct * 0.1)
+    # Ferma solo se il saldo reale non è sufficiente ad aprire nemmeno un trade minimo
+    # Usa il saldo attuale (non il capitale dichiarato) per evitare stop falsi dopo perdite
+    min_trade_size = tradable_capital * alloc_pct
     open_positions = state["positions"]
-    if tradable_capital < min_tradable and cfg.get("realMode", False):
+    if min_trade_size < 1.0 and cfg.get("realMode", False):
         if open_positions:
-            # Capitale in posizioni aperte — aspetta che si chiudano, non stoppare
+            # Capitale bloccato in posizioni aperte — aspetta che si chiudano
             _update_pnl(state)
             return
         else:
-            # Nessuna posizione aperta e saldo USDC esaurito — stop legittimo
             state["running"] = False
             add_log(state, "info", "STOP AUTO",
-                f"Saldo insufficiente (${tradable_capital:.2f}) — sessione fermata")
+                f"Saldo insufficiente per aprire nuovi trade (${tradable_capital:.2f}) — sessione fermata")
             await notify(state, f"STOP AUTO: saldo insufficiente ${tradable_capital:.2f}")
             return
     elif tradable_capital < 1.0 and not cfg.get("realMode", False):
