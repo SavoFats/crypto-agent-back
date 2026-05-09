@@ -394,7 +394,7 @@ async def fetch_all_candles():
     print(f"Candele aggiornate: {updated}/{len(syms)}")
 
 def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0.02,
-                   max_stop_pct: float = 0.025,
+                   max_stop_pct: float = 0.05,
                    trend1h_filter: bool = True, rsi_filter: bool = True,
                    rsi_min: float = 35.0, rsi_max: float = 65.0,
                    min_r: float = 0.01) -> dict:
@@ -423,9 +423,9 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
     # 2. Trend rialzista su 1h (filtro superiore)
     trend1h_ok = (ema20_1h > ema50_1h) if (trend1h_filter and ema20_1h > 0 and ema50_1h > 0) else True
 
-    # 3. Prezzo vicino a EMA20 su 5min (pullback)
-    dist_from_ema20 = abs(current_price - ema20_5m) / ema20_5m
-    pullback_ok = dist_from_ema20 <= pullback_tolerance
+    # 3. Prezzo vicino a EMA20 su 5min (pullback) — deve essere sopra o sulla media, non sotto
+    dist_from_ema20 = (current_price - ema20_5m) / ema20_5m  # positivo = sopra EMA, negativo = sotto
+    pullback_ok = 0 <= dist_from_ema20 <= pullback_tolerance
 
     # 4. RSI non ipercomprato
     rsi_ok = (rsi_min <= rsi_14 <= rsi_max) if rsi_filter else True
@@ -445,7 +445,10 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
     elif not trend_ok:
         reason = f"no trend 15m (EMA20 {ema20_15m:.4f} < EMA50 {ema50_15m:.4f})"
     elif not pullback_ok:
-        reason = f"no pullback (dist EMA20: {dist_from_ema20*100:.1f}% > {pullback_tolerance*100:.1f}%)"
+        if dist_from_ema20 < 0:
+            reason = f"prezzo sotto EMA20 ({dist_from_ema20*100:.1f}%) — breakdown"
+        else:
+            reason = f"no pullback (dist EMA20: {dist_from_ema20*100:.1f}% > {pullback_tolerance*100:.1f}%)"
     elif not rsi_ok:
         reason = f"RSI fuori range ({rsi_14:.1f}, range {rsi_min:.0f}-{rsi_max:.0f})"
     elif not stop_ok:
