@@ -318,15 +318,16 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 .pos-chart-wrap { margin-top:10px; height:60px; position:relative; }
 .pos-chart-canvas { width:100%; height:60px; display:block; }
 
-/* Mini-log agente nel monitor */
-.agent-msg { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
-.agent-msg:last-child { border-bottom:none; }
-.agent-msg-dot { width:6px; height:6px; border-radius:50%; margin-top:5px; flex-shrink:0; }
-.agent-msg-dot.buy { background:var(--green); }
-.agent-msg-dot.sell { background:var(--red); }
-.agent-msg-dot.info { background:var(--text3); }
-.agent-msg-text { font-size:12px; color:var(--text2); flex:1; line-height:1.5; font-weight:500; }
-.agent-msg-time { font-size:10px; color:var(--text3); flex-shrink:0; font-variant-numeric:tabular-nums; margin-top:1px; }
+/* Log agente — badge + chip */
+.agent-row { display:flex; align-items:flex-start; gap:8px; padding:9px 0; border-bottom:1px solid var(--border); }
+.agent-row:last-child { border-bottom:none; }
+.agent-badge { font-size:9px; font-weight:700; letter-spacing:0.04em; padding:3px 7px; border-radius:6px; flex-shrink:0; margin-top:1px; white-space:nowrap; text-transform:uppercase; }
+.agent-body { flex:1; min-width:0; }
+.agent-plain { font-size:12px; color:var(--text2); line-height:1.4; font-weight:500; word-break:break-word; }
+.agent-chips { display:flex; flex-wrap:wrap; gap:4px; }
+.agent-chip { font-size:10px; font-weight:600; padding:2px 7px; border-radius:5px; background:var(--surface2); border:1px solid var(--border); color:var(--text3); white-space:nowrap; }
+.agent-chip em { font-style:normal; color:var(--text2); }
+.agent-time { font-size:10px; color:var(--text3); flex-shrink:0; font-variant-numeric:tabular-nums; padding-top:3px; }
 .empty-icon { font-size:36px; margin-bottom:10px; opacity:0.5; }
 .empty-text { font-size:14px; font-weight:500; }
 
@@ -2489,11 +2490,37 @@ function render() {
       actWrap.style.display = 'block';
       const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
       actList.innerHTML = logs.map(l => {
-        const time = l.ts ? new Date(l.ts).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit', second:'2-digit'}) : (l.time || '');
-        return `<div class="agent-msg">
-          <div class="agent-msg-dot ${esc(l.type)}"></div>
-          <div class="agent-msg-text"><strong>${esc(l.label)}</strong> ${esc(l.desc)}</div>
-          <div class="agent-msg-time">${time}</div>
+        const time = l.ts ? new Date(l.ts).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}) : (l.time || '');
+        const label = l.label || '';
+        const desc = String(l.desc || '');
+        // Badge color
+        let bs;
+        if (l.type === 'buy') bs = 'background:var(--green-dim);color:var(--green)';
+        else if (l.type === 'sell') bs = 'background:var(--red-dim);color:var(--red)';
+        else if (/ERRORE|WARN/i.test(label)) bs = 'background:var(--red-dim);color:var(--red)';
+        else if (/SEGNALE/i.test(label)) bs = 'background:rgba(240,185,11,0.15);color:var(--yellow)';
+        else if (/STOP|FINE|PAUSA/i.test(label)) bs = 'background:var(--surface3);color:var(--text3)';
+        else bs = 'background:var(--blue-dim);color:var(--blue)';
+        // Body: chips if pipe-separated, plain text otherwise
+        let body;
+        if (desc.includes(' | ')) {
+          const chips = desc.split(' | ').map(p => {
+            const ci = p.indexOf(': ');
+            if (ci > -1) {
+              const k = esc(p.slice(0, ci));
+              const v = esc(p.slice(ci + 2));
+              return `<span class="agent-chip">${k}: <em>${v}</em></span>`;
+            }
+            return `<span class="agent-chip">${esc(p)}</span>`;
+          }).join('');
+          body = `<div class="agent-chips">${chips}</div>`;
+        } else {
+          body = `<div class="agent-plain">${esc(desc)}</div>`;
+        }
+        return `<div class="agent-row">
+          <span class="agent-badge" style="${bs}">${esc(label)}</span>
+          <div class="agent-body">${body}</div>
+          <span class="agent-time">${time}</span>
         </div>`;
       }).join('');
     } else {
