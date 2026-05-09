@@ -1489,27 +1489,8 @@ const LOGO_URLS = {
   ZEC:'https://assets.coingecko.com/coins/images/486/small/circle-zcash-color.png',
   TREE:'https://assets.coingecko.com/coins/images/39972/small/tree.jpg',
 };
-const _logoCache = {};
 function getLogo(sym) {
-  if (LOGO_URLS[sym]) return LOGO_URLS[sym];
-  if (_logoCache[sym] !== undefined) return _logoCache[sym] || null;
-  // Segnaposto mentre carica
-  _logoCache[sym] = null;
-  fetch(`https://api.coingecko.com/api/v3/search?query=${sym}`)
-    .then(r => r.json())
-    .then(d => {
-      const coin = (d.coins || []).find(c => c.symbol.toUpperCase() === sym);
-      if (coin && coin.large) {
-        _logoCache[sym] = coin.large.replace('/large/', '/small/');
-        // Aggiorna img già nel DOM tramite id
-        const img = document.getElementById('logo-img-' + sym);
-        const ph  = document.getElementById('logo-ph-' + sym);
-        if (img) { img.src = _logoCache[sym]; img.style.display = ''; }
-        if (ph)  { ph.style.display = 'none'; }
-      }
-    })
-    .catch(() => {});
-  return null;
+  return LOGO_URLS[sym] || `https://bin.bnbstatic.com/image/crypto/square/${sym}.png`;
 }
 
 // ── STATE ────────────────────────────────────────────────────────────────────
