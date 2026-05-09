@@ -561,27 +561,112 @@ input[type=range]::-webkit-slider-thumb { box-shadow:0 0 0 4px rgba(0,82,255,0.1
   </div>
 </div>
 
-<!-- Modal Revolut X config -->
-<div class="modal-overlay" id="revxModal">
-  <div class="modal-card" style="max-width:400px">
-    <div class="modal-title">Revolut X API</div>
-    <div class="modal-body" style="text-align:left">
-      <div class="field" style="margin-bottom:12px">
-        <div class="field-label">API Key ID</div>
-        <input type="text" id="revxKeyId" placeholder="2LDsmJVAh..." style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;color:var(--text);font-size:14px;font-family:var(--sans);outline:none;box-sizing:border-box">
+<!-- Modal Revolut X config — wizard 3 step -->
+<div class="modal-overlay" id="revxModal" onclick="if(event.target===this)closeRevxModal()">
+  <div class="modal-card" style="max-width:420px;width:100%">
+
+    <!-- Header fisso -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div class="modal-title" style="margin-bottom:0">Collega Revolut X</div>
+      <button onclick="closeRevxModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Stepper -->
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:20px">
+      <div class="revx-step-dot active" id="revxDot1"></div>
+      <div class="revx-step-line" id="revxLine1"></div>
+      <div class="revx-step-dot" id="revxDot2"></div>
+      <div class="revx-step-line" id="revxLine2"></div>
+      <div class="revx-step-dot" id="revxDot3"></div>
+      <div style="margin-left:8px;font-size:11px;font-weight:600;color:var(--text3)" id="revxStepLabel">Passo 1 di 3</div>
+    </div>
+
+    <!-- STEP 1: guida creazione chiavi -->
+    <div id="revxStep1">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Crea le API Key su Revolut X</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6">Hai bisogno di due cose: un <strong>Key ID</strong> e un file <strong>private_key.pem</strong>. Si generano in pochi clic dal sito di Revolut X.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">1</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.5">Apri <strong style="color:var(--text)">Revolut X</strong> dal browser (non dall'app)</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">2</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.5">Vai in <strong style="color:var(--text)">Account → API Keys → Create API Key</strong></div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">3</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.5">Dai un nome alla chiave (es. <em>Zentra</em>) e clicca <strong style="color:var(--text)">Generate</strong></div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">4</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.5">Revolut ti mostra il <strong style="color:var(--text)">Key ID</strong> e ti fa scaricare il file <strong style="color:var(--text)">private_key.pem</strong> — tienili a portata di mano</div>
+        </div>
       </div>
-      <div class="field">
-        <div class="field-label">Chiave privata (private_key.pem)</div>
-        <textarea id="revxPrivateKey" rows="6" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;color:var(--text);font-size:11px;font-family:monospace;outline:none;box-sizing:border-box;resize:vertical"></textarea>
-        <div class="field-hint">Incolla il contenuto completo del file private_key.pem</div>
+      <div style="background:rgba(0,82,255,0.08);border:1px solid rgba(0,82,255,0.2);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:18px">
+        💡 Il file <code>.pem</code> viene scaricato <strong>una volta sola</strong> al momento della creazione — non perderlo.
+      </div>
+      <div class="modal-actions" style="grid-template-columns:1fr 1fr">
+        <button class="modal-btn cancel" onclick="closeRevxModal()">Annulla</button>
+        <button class="modal-btn confirm-real" style="background:var(--blue)" onclick="revxGoStep(2)">Ho le chiavi →</button>
       </div>
     </div>
-    <div class="modal-actions">
-      <button class="modal-btn cancel" onclick="document.getElementById('revxModal').classList.remove('open')">Annulla</button>
-      <button class="modal-btn confirm" onclick="saveRevxKeys()">Salva</button>
+
+    <!-- STEP 2: Key ID -->
+    <div id="revxStep2" style="display:none">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Inserisci il Key ID</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6">Il Key ID è una stringa corta che trovi sulla pagina delle API Key di Revolut X, accanto al nome che hai scelto.</div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:12px;font-family:monospace;color:var(--text3);margin-bottom:14px;word-break:break-all">
+        Es: <span style="color:var(--blue)">2LDsmJVAh7Qk9fXpT3mR...</span>
+      </div>
+      <input type="text" id="revxKeyId" placeholder="Incolla qui il Key ID" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;color:var(--text);font-size:14px;font-family:var(--sans);outline:none;box-sizing:border-box;margin-bottom:6px" oninput="revxValidateStep2()">
+      <div style="font-size:11px;color:var(--red);min-height:16px;margin-bottom:14px" id="revxKeyIdErr"></div>
+      <div class="modal-actions" style="grid-template-columns:1fr 1fr">
+        <button class="modal-btn cancel" onclick="revxGoStep(1)">← Indietro</button>
+        <button class="modal-btn confirm-real" style="background:var(--blue)" id="revxStep2Btn" onclick="revxGoStep(3)" disabled>Avanti →</button>
+      </div>
     </div>
+
+    <!-- STEP 3: chiave privata -->
+    <div id="revxStep3" style="display:none">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Carica la chiave privata</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6">Carica il file <strong>private_key.pem</strong> scaricato da Revolut X, oppure incolla il contenuto manualmente.</div>
+
+      <!-- Upload file -->
+      <div id="revxDropZone" onclick="document.getElementById('revxFileInput').click()" ondragover="event.preventDefault();this.style.borderColor='var(--blue)';this.style.background='var(--blue-dim)'" ondragleave="this.style.borderColor='var(--border2)';this.style.background=''" ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='';revxLoadFile({target:{files:event.dataTransfer.files}})" style="border:2px dashed var(--border2);border-radius:14px;padding:20px;text-align:center;cursor:pointer;margin-bottom:12px;transition:border-color 0.2s,background 0.2s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border2)'">
+        <div style="font-size:28px;margin-bottom:6px">📄</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">Clicca per caricare <code>private_key.pem</code></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">oppure trascina il file qui</div>
+      </div>
+      <input type="file" id="revxFileInput" accept=".pem,.key,.txt" style="display:none" onchange="revxLoadFile(event)">
+
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <div style="font-size:11px;color:var(--text3);font-weight:600">oppure incolla</div>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+
+      <textarea id="revxPrivateKey" rows="5" placeholder="-----BEGIN PRIVATE KEY-----&#10;MIIEvQIBADA...&#10;-----END PRIVATE KEY-----" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;color:var(--text);font-size:11px;font-family:monospace;outline:none;box-sizing:border-box;resize:none" oninput="revxValidateStep3()"></textarea>
+      <div style="font-size:11px;min-height:16px;margin-top:4px;margin-bottom:14px" id="revxPemStatus"></div>
+
+      <div class="modal-actions" style="grid-template-columns:1fr 1fr">
+        <button class="modal-btn cancel" onclick="revxGoStep(2)">← Indietro</button>
+        <button class="modal-btn confirm-real" style="background:var(--blue)" id="revxStep3Btn" onclick="saveRevxKeys()" disabled>Salva e connetti</button>
+      </div>
+    </div>
+
   </div>
 </div>
+
+<style>
+.revx-step-dot { width:10px;height:10px;border-radius:50%;background:var(--border2);transition:background 0.2s,transform 0.2s;flex-shrink:0; }
+.revx-step-dot.active { background:var(--blue);transform:scale(1.2); }
+.revx-step-dot.done { background:var(--green); }
+.revx-step-line { flex:1;height:2px;background:var(--border);transition:background 0.3s; }
+.revx-step-line.done { background:var(--green); }
+</style>
 
 <!-- Modal Telegram linking -->
 <div class="modal-overlay" id="telegramModal">
@@ -1533,6 +1618,77 @@ async function handleTelegramAction() {
     btn.textContent = 'Genera codice';
     btn.disabled = false;
   }
+}
+
+function closeRevxModal() {
+  document.getElementById('revxModal').classList.remove('open');
+  revxGoStep(1);
+}
+
+function revxGoStep(n) {
+  [1, 2, 3].forEach(i => {
+    document.getElementById('revxStep' + i).style.display = i === n ? '' : 'none';
+  });
+  const labels = ['Passo 1 di 3', 'Passo 2 di 3', 'Passo 3 di 3'];
+  document.getElementById('revxStepLabel').textContent = labels[n - 1];
+
+  // Dot 1
+  const d1 = document.getElementById('revxDot1');
+  d1.className = 'revx-step-dot' + (n > 1 ? ' done' : n === 1 ? ' active' : '');
+  // Line 1
+  document.getElementById('revxLine1').className = 'revx-step-line' + (n > 1 ? ' done' : '');
+  // Dot 2
+  const d2 = document.getElementById('revxDot2');
+  d2.className = 'revx-step-dot' + (n === 2 ? ' active' : n > 2 ? ' done' : '');
+  // Line 2
+  document.getElementById('revxLine2').className = 'revx-step-line' + (n > 2 ? ' done' : '');
+  // Dot 3
+  const d3 = document.getElementById('revxDot3');
+  d3.className = 'revx-step-dot' + (n === 3 ? ' active' : '');
+}
+
+function revxValidateStep2() {
+  const val = document.getElementById('revxKeyId').value.trim();
+  const btn = document.getElementById('revxStep2Btn');
+  const err = document.getElementById('revxKeyIdErr');
+  if (val.length >= 8) {
+    btn.disabled = false;
+    err.textContent = '';
+  } else {
+    btn.disabled = true;
+    err.textContent = val.length > 0 ? 'Il Key ID sembra troppo corto' : '';
+  }
+}
+
+function revxValidateStep3() {
+  const pem = document.getElementById('revxPrivateKey').value.trim();
+  const btn = document.getElementById('revxStep3Btn');
+  const status = document.getElementById('revxPemStatus');
+  const valid = pem.includes('BEGIN') && pem.includes('END') && pem.length > 100;
+  btn.disabled = !valid;
+  if (!pem) {
+    status.textContent = '';
+    status.style.color = 'var(--text3)';
+  } else if (valid) {
+    status.textContent = '✓ Chiave privata valida';
+    status.style.color = 'var(--green)';
+  } else {
+    status.textContent = 'Formato non valido — assicurati di copiare tutto il contenuto del file .pem';
+    status.style.color = 'var(--red)';
+  }
+}
+
+function revxLoadFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById('revxPrivateKey').value = e.target.result;
+    revxValidateStep3();
+    const zone = document.getElementById('revxDropZone');
+    zone.innerHTML = '<div style="font-size:22px;margin-bottom:4px">✅</div><div style="font-size:13px;font-weight:600;color:var(--green)">' + file.name + ' caricato</div>';
+  };
+  reader.readAsText(file);
 }
 
 async function saveRevxKeys() {
