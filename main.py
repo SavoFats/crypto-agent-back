@@ -107,6 +107,7 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # codici temporanei per il linking Telegram: code -> (user_id, expiry_timestamp)
 _tg_link_codes: dict[str, tuple[int, float]] = {}
+_tg_bot_username: str = ""  # caricato all'avvio via getMe
 
 async def send_telegram(msg: str):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -1633,6 +1634,7 @@ async def startup():
     asyncio.create_task(background_loop())
     asyncio.create_task(telegram_loop())
     asyncio.create_task(load_global_revx_keys())
+    asyncio.create_task(load_telegram_bot_info())
 
 async def load_global_revx_keys():
     """Carica le chiavi RevX e le coppie USD disponibili all'avvio."""
@@ -1669,6 +1671,21 @@ async def load_global_revx_keys():
                 print(f"[REVX] Errore caricamento coppie: {e2}")
     except Exception as e:
         print(f"[REVX] Errore caricamento chiavi globali: {e}")
+
+async def load_telegram_bot_info():
+    """Recupera lo username del bot Telegram via getMe e lo salva in cache."""
+    global _tg_bot_username
+    if not TELEGRAM_TOKEN:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getMe")
+        data = r.json()
+        if data.get("ok"):
+            _tg_bot_username = data["result"].get("username", "")
+            print(f"[TG] Bot username: @{_tg_bot_username}")
+    except Exception as e:
+        print(f"[TG] Errore getMe: {e}")
 
 async def restore_sessions_from_db(pool):
     """Ripristina sessioni attive salvate nel DB dopo un riavvio."""
@@ -1985,10 +2002,20 @@ async def get_trades(user_id: int = Depends(get_current_user)):
             print(f"DB trades fetch error: {e}")
     return {"trades": mem_trades}
 
+@app.get("/telegram/bot_info")
+async def telegram_bot_info(user_id: int = Depends(get_current_user)):
+    return {
+        "username": _tg_bot_username,
+        "url": f"https://t.me/{_tg_bot_username}" if _tg_bot_username else "",
+        "configured": bool(TELEGRAM_TOKEN),
+    }
+
 @app.get("/telegram/link_code")
 async def telegram_link_code(user_id: int = Depends(get_current_user)):
     """Genera un codice temporaneo (5 min) da inviare al bot per collegare Telegram."""
     import random, string
+    if not TELEGRAM_TOKEN:
+        raise HTTPException(status_code=400, detail="Telegram non configurato su questo server")
     # Pulizia codici scaduti
     now = time.time()
     expired = [k for k, (_, exp) in _tg_link_codes.items() if exp < now]
@@ -1996,7 +2023,12 @@ async def telegram_link_code(user_id: int = Depends(get_current_user)):
         del _tg_link_codes[k]
     code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     _tg_link_codes[code] = (user_id, now + 300)
-    return {"code": code, "expires_in": 300}
+    return {
+        "code": code,
+        "expires_in": 300,
+        "bot_url": f"https://t.me/{_tg_bot_username}" if _tg_bot_username else "",
+        "bot_username": _tg_bot_username,
+    }
 
 @app.delete("/telegram/unlink")
 async def telegram_unlink(user_id: int = Depends(get_current_user)):

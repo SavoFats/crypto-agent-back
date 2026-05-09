@@ -470,8 +470,9 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
           <li>Apri il bot Telegram e invia il comando mostrato</li>
           <li>Il collegamento avviene automaticamente</li>
         </ol>
+        <div id="tgBotLink" style="display:none;font-size:13px;color:var(--text2);margin-bottom:10px;text-align:center"></div>
         <div id="tgCodeBox" style="display:none;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:16px;text-align:center;margin-bottom:4px">
-          <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Invia questo comando al bot Telegram</div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Invia questo comando al bot</div>
           <div style="font-size:20px;font-weight:700;color:var(--text);letter-spacing:0.1em;font-family:monospace" id="tgCodeText">/link ------</div>
           <div style="font-size:11px;color:var(--text3);margin-top:8px" id="tgCodeExpiry">Valido per 5 minuti</div>
         </div>
@@ -1258,6 +1259,15 @@ async function handleTelegramAction() {
       const res = await fetch(API + '/telegram/link_code', { headers: authHeaders() });
       const data = await res.json();
       document.getElementById('tgCodeText').textContent = '/link ' + data.code;
+      const botBox = document.getElementById('tgBotLink');
+      if (botBox) {
+        if (data.bot_url) {
+          botBox.innerHTML = 'Apri il bot: <a href="' + data.bot_url + '" target="_blank" style="color:var(--blue);font-weight:700">@' + data.bot_username + '</a>';
+          botBox.style.display = 'block';
+        } else {
+          botBox.style.display = 'none';
+        }
+      }
       document.getElementById('tgCodeBox').style.display = 'block';
       let secs = data.expires_in || 300;
       const expEl = document.getElementById('tgCodeExpiry');
