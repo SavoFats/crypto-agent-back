@@ -720,7 +720,8 @@ async def enter_position(state: dict, sym_data: dict, tradable_capital: float):
     is_real  = cfg.get("realMode", False)
 
     alloc_pct = cfg.get("allocPct", 0.20)
-    COINBASE_FEE = 0.006  # 0.60% per lato
+    use_revx  = state.get("use_revx", False)
+    COINBASE_FEE = 0.0009 if use_revx else 0.006  # RevX: 0.09% | Coinbase: 0.60%
     # Size = quota del capitale tradabile netto per questo trade
     size = tradable_capital * alloc_pct
     if size < 1:
