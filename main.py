@@ -1692,7 +1692,6 @@ async def load_telegram_bot_info():
 async def fetch_coingecko_logos():
     """Fetcha i loghi di ~500 coin da CoinGecko markets API e li cacha in _cg_logos."""
     global _cg_logos
-    await asyncio.sleep(5)  # aspetta che il resto del server sia pronto
     try:
         logos = {}
         async with httpx.AsyncClient(timeout=15) as client:
@@ -1706,10 +1705,10 @@ async def fetch_coingecko_logos():
                     break
                 for coin in r.json():
                     sym = coin.get("symbol", "").upper()
-                    img = coin.get("image", "")
+                    img = (coin.get("image") or "").replace("/large/", "/small/")
                     if sym and img:
                         logos[sym] = img
-                await asyncio.sleep(2)  # rispetta rate limit CoinGecko free
+                await asyncio.sleep(1.5)  # rispetta rate limit CoinGecko free
         _cg_logos = logos
         print(f"[CG] Loghi caricati per {len(logos)} coin")
     except Exception as e:

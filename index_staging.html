@@ -1242,7 +1242,6 @@ async function loadUserProfile() {
     _simMode = me.sim_mode !== undefined ? me.sim_mode : true;
     window._realMode = (_hasApiKeys || _hasRevxKeys) && !_simMode;
     window._tgLinked = me.telegram_linked || false;
-    loadServerLogos();
     const pmTg = document.getElementById('pmTelegram');
     if (pmTg) pmTg.textContent = window._tgLinked ? 'Telegram ✓' : 'Collega Telegram';
 
@@ -1254,6 +1253,9 @@ async function loadUserProfile() {
     }
 
     _watchlist = new Set(wl.symbols || []);
+
+    // Carica loghi dal server prima di renderizzare (così le coin senza logo locale le prendono dal backend)
+    await loadServerLogos();
 
     // Aggiorna toggle sim nel menu profilo
     updateSimToggle();
@@ -1591,7 +1593,18 @@ let _serverLogos = {};
 async function loadServerLogos() {
   try {
     const r = await fetch(API + '/logos', { headers: authHeaders() });
-    _serverLogos = await r.json();
+    const data = await r.json();
+    _serverLogos = data;
+    // Se il server ha restituito solo pochi loghi (CoinGecko non ancora pronto), riprova dopo 5s
+    if (Object.keys(data).length < 50) {
+      setTimeout(async () => {
+        try {
+          const r2 = await fetch(API + '/logos', { headers: authHeaders() });
+          _serverLogos = await r2.json();
+          renderMarket && renderMarket();
+        } catch(e) {}
+      }, 5000);
+    }
   } catch(e) {}
 }
 function getLogo(sym) {
