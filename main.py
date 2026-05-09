@@ -2394,7 +2394,8 @@ async def debug_coinbase(user_id: int = Depends(get_current_user)):
 
 @app.get("/logos")
 async def get_logos(user_id: int = Depends(get_current_user)):
-    LOGO_URLS = {
+    # Loghi di qualità per le coin principali (CoinGecko CDN)
+    KNOWN = {
         "BTC":"https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
         "ETH":"https://assets.coingecko.com/coins/images/279/small/ethereum.png",
         "SOL":"https://assets.coingecko.com/coins/images/4128/small/solana.png",
@@ -2426,7 +2427,12 @@ async def get_logos(user_id: int = Depends(get_current_user)):
         "ICP":"https://assets.coingecko.com/coins/images/14495/small/Internet_Computer_logo.png",
         "RENDER":"https://assets.coingecko.com/coins/images/11636/small/rndr.png",
     }
-    return LOGO_URLS
+    # Per tutte le altre coin in market_data usa il CDN Binance (copre qualsiasi coin listata)
+    result = {
+        sym: KNOWN.get(sym, f"https://bin.bnbstatic.com/image/crypto/square/{sym}.png")
+        for sym in market_data
+    }
+    return result
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
