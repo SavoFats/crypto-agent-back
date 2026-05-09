@@ -1437,7 +1437,17 @@ async def poll_telegram():
                     await send_telegram_to(chat_id,
                         "✅ Account collegato!\nOra puoi usare:\n/status — stato sessione\n/stop — ferma l'agente\n/close BTC — chiudi posizione")
                 else:
-                    await send_telegram_to(chat_id, "❌ Codice non valido o scaduto. Genera un nuovo codice dall'app.")
+                    # Prima di dare errore, controlla se questo chat_id è già collegato
+                    # (succede quando lo stesso update viene processato due volte)
+                    already_linked = False
+                    if db_pool:
+                        async with db_pool.acquire() as conn:
+                            row_chk = await conn.fetchrow(
+                                "SELECT id FROM users WHERE telegram_chat_id = $1", chat_id
+                            )
+                        already_linked = bool(row_chk)
+                    if not already_linked:
+                        await send_telegram_to(chat_id, "❌ Codice non valido o scaduto. Genera un nuovo codice dall'app.")
                 continue
 
             # Per tutti gli altri comandi: trova l'utente dal chat_id registrato
