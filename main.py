@@ -1979,7 +1979,7 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
     rsi_s  = f"{cfg.get('rsiMin',40):.0f}-{cfg.get('rsiMax',60):.0f}" if cfg.get("rsiFilter", True) else "OFF"
     t1h_s  = "ON" if cfg.get("trend1hFilter", True) else "OFF"
     trl_s  = f"{cfg.get('trailingPct',0.5)*100:.0f}%" if cfg.get("trailingStop", True) else "OFF"
-    curr_sym = "€" if use_revx else "$"
+    curr_sym = "$"
     exchange_name = "Revolut X" if use_revx else ("Coinbase" if cb_key else "SIM")
     add_log(state, "info", "AVVIO",
         f"{curr_sym}{capital:.0f} | {mode} [{exchange_name}] | Cap: {capp:.0f}% | Alloc: {alloc:.0f}% | "
