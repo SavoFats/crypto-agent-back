@@ -1207,6 +1207,7 @@ async function loadUserProfile() {
     _simMode = me.sim_mode !== undefined ? me.sim_mode : true;
     window._realMode = _hasApiKeys && !_simMode;
     window._tgLinked = me.telegram_linked || false;
+    loadServerLogos();
     const pmTg = document.getElementById('pmTelegram');
     if (pmTg) pmTg.textContent = window._tgLinked ? 'Telegram ✓' : 'Collega Telegram';
 
@@ -1489,8 +1490,15 @@ const LOGO_URLS = {
   ZEC:'https://assets.coingecko.com/coins/images/486/small/circle-zcash-color.png',
   TREE:'https://assets.coingecko.com/coins/images/39972/small/tree.jpg',
 };
+let _serverLogos = {};
+async function loadServerLogos() {
+  try {
+    const r = await fetch(API + '/logos', { headers: authHeaders() });
+    _serverLogos = await r.json();
+  } catch(e) {}
+}
 function getLogo(sym) {
-  return LOGO_URLS[sym] || `https://bin.bnbstatic.com/image/crypto/square/${sym}.png`;
+  return LOGO_URLS[sym] || _serverLogos[sym] || `https://bin.bnbstatic.com/image/crypto/square/${sym}.png`;
 }
 
 // ── STATE ────────────────────────────────────────────────────────────────────

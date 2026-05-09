@@ -108,6 +108,7 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 # codici temporanei per il linking Telegram: code -> (user_id, expiry_timestamp)
 _tg_link_codes: dict[str, tuple[int, float]] = {}
 _tg_bot_username: str = ""  # caricato all'avvio via getMe
+_cg_logos: dict[str, str] = {}  # symbol -> image_url, caricato da CoinGecko markets API
 
 async def send_telegram(msg: str):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -1635,6 +1636,7 @@ async def startup():
     asyncio.create_task(telegram_loop())
     asyncio.create_task(load_global_revx_keys())
     asyncio.create_task(load_telegram_bot_info())
+    asyncio.create_task(fetch_coingecko_logos())
 
 async def load_global_revx_keys():
     """Carica le chiavi RevX e le coppie USD disponibili all'avvio."""
@@ -1686,6 +1688,32 @@ async def load_telegram_bot_info():
             print(f"[TG] Bot username: @{_tg_bot_username}")
     except Exception as e:
         print(f"[TG] Errore getMe: {e}")
+
+async def fetch_coingecko_logos():
+    """Fetcha i loghi di ~500 coin da CoinGecko markets API e li cacha in _cg_logos."""
+    global _cg_logos
+    await asyncio.sleep(5)  # aspetta che il resto del server sia pronto
+    try:
+        logos = {}
+        async with httpx.AsyncClient(timeout=15) as client:
+            for page in (1, 2):
+                r = await client.get(
+                    "https://api.coingecko.com/api/v3/coins/markets",
+                    params={"vs_currency": "usd", "order": "market_cap_desc",
+                            "per_page": 250, "page": page}
+                )
+                if r.status_code != 200:
+                    break
+                for coin in r.json():
+                    sym = coin.get("symbol", "").upper()
+                    img = coin.get("image", "")
+                    if sym and img:
+                        logos[sym] = img
+                await asyncio.sleep(2)  # rispetta rate limit CoinGecko free
+        _cg_logos = logos
+        print(f"[CG] Loghi caricati per {len(logos)} coin")
+    except Exception as e:
+        print(f"[CG] Errore fetch loghi: {e}")
 
 async def restore_sessions_from_db(pool):
     """Ripristina sessioni attive salvate nel DB dopo un riavvio."""
@@ -2427,9 +2455,11 @@ async def get_logos(user_id: int = Depends(get_current_user)):
         "ICP":"https://assets.coingecko.com/coins/images/14495/small/Internet_Computer_logo.png",
         "RENDER":"https://assets.coingecko.com/coins/images/11636/small/rndr.png",
     }
-    # Per tutte le altre coin in market_data usa il CDN Binance (copre qualsiasi coin listata)
+    # Per tutte le coin in market_data: hardcoded > CoinGecko cache > Binance CDN
     result = {
-        sym: KNOWN.get(sym, f"https://bin.bnbstatic.com/image/crypto/square/{sym}.png")
+        sym: KNOWN.get(sym)
+             or _cg_logos.get(sym)
+             or f"https://bin.bnbstatic.com/image/crypto/square/{sym}.png"
         for sym in market_data
     }
     return result
