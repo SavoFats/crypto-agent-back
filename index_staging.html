@@ -431,9 +431,12 @@ input[type=range]::-webkit-slider-thumb { box-shadow:0 0 0 4px rgba(0,82,255,0.1
 
 /* Auth screen background */
 #authScreen { background:transparent; }
+/* Hide chrome (header + tabbar) while not authenticated */
+body.auth-active .hdr,
+body.auth-active .tabbar { display:none !important; }
 </style>
 </head>
-<body>
+<body class="auth-active">
 
 <div class="liquid-bg" aria-hidden="true">
   <div class="blob blob-1"></div>
@@ -1328,7 +1331,7 @@ function openApiKeysFromMenu() {
   }
   document.getElementById('profileMenu').classList.remove('open');
   showApiKeys();
-  document.getElementById('authScreen').style.display = 'flex';
+  showAuthScreen();
 }
 function changeAvatar() {
   document.getElementById('profileMenu').classList.remove('open');
@@ -1426,6 +1429,11 @@ function hideAuthScreen() {
   s.style.opacity = '0';
   s.style.transition = 'opacity 0.2s';
   setTimeout(() => { s.style.display = 'none'; s.style.opacity = ''; }, 200);
+  document.body.classList.remove('auth-active');
+}
+function showAuthScreen() {
+  showAuthScreen();
+  document.body.classList.add('auth-active');
 }
 function showAuthError(id, msg) { const el=document.getElementById(id); el.textContent=msg; el.style.display=''; }
 
@@ -1491,23 +1499,23 @@ async function checkAuth() {
   if (_authToken) {
     document.getElementById('authScreen').style.display = 'none';
   }
-  if (!_authToken) { document.getElementById('authScreen').style.display = 'flex'; showLogin(); return; }
+  if (!_authToken) { showAuthScreen(); showLogin(); return; }
   try {
     const r = await fetch(API + '/auth/me', { headers: authHeaders() });
     if (!r.ok) {
       localStorage.removeItem('ca_token');
-      document.getElementById('authScreen').style.display = 'flex';
+      showAuthScreen();
       showLogin(); return;
     }
     const d = await r.json();
     _username = d.username;
     if (!d.has_api_keys) {
-      document.getElementById('authScreen').style.display = 'flex';
+      showAuthScreen();
       showApiKeys(); return;
     }
     hideAuthScreen(); initApp();
   } catch(e) {
-    document.getElementById('authScreen').style.display = 'flex';
+    showAuthScreen();
     showLogin();
   }
 }
@@ -2355,7 +2363,7 @@ async function poll() {
     if (sRes.status === 401) {
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
       localStorage.removeItem('ca_token');
-      document.getElementById('authScreen').style.display = 'flex';
+      showAuthScreen();
       showLogin();
       return;
     }
