@@ -739,7 +739,7 @@ input[type=range]::-webkit-slider-thumb { box-shadow:0 0 0 4px rgba(0,82,255,0.1
         <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">1H</div>
         <div>
           <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Trend 1h</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">EMA20 &gt; EMA50 sulla timeframe oraria. Non misura l'ultima ora — misura la <strong style="color:var(--text)">struttura di trend delle ultime 50 ore</strong>. Anche se il mercato è rosso oggi, il trend 1h può restare verde se l'uptrend è iniziato giorni fa. È il filtro principale: niente long contro il trend strutturale.</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">EMA20 &gt; EMA50 sull'oraria. Struttura di trend delle ultime 50 ore. È il filtro principale: niente long contro il trend strutturale.</div>
         </div>
       </div>
 
@@ -749,7 +749,17 @@ input[type=range]::-webkit-slider-thumb { box-shadow:0 0 0 4px rgba(0,82,255,0.1
         <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">15M</div>
         <div>
           <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Trend 15m</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">EMA20 &gt; EMA50 sulla timeframe a 15 minuti. Conferma che il trend di medio termine è rialzista. Deve essere allineato con il trend 1h.</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">EMA20 &gt; EMA50 su 15 minuti. Conferma che il trend di medio termine è allineato con quello orario.</div>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border)"></div>
+
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">SLP</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Slope EMA20</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">La EMA20 su 5m è in <strong style="color:var(--text)">salita</strong> negli ultimi 15 minuti. Una EMA piatta o in discesa segnala trend in indebolimento — anche se è ancora sopra la EMA50, il momentum sta venendo meno. Solo slope positive vengono considerate.</div>
         </div>
       </div>
 
@@ -759,7 +769,7 @@ input[type=range]::-webkit-slider-thumb { box-shadow:0 0 0 4px rgba(0,82,255,0.1
         <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">PULL</div>
         <div>
           <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Pullback</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">Il prezzo è tornato vicino all'EMA20 su 5 minuti (entro la soglia configurata). È il <strong style="color:var(--text)">timing dell'ingresso</strong>: si entra quando il trend è attivo ma il prezzo ha fatto un ritracciamento, non quando è già esploso al rialzo. Evita il FOMO.</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">L'<strong style="color:var(--text)">ultima candela chiusa</strong> è tornata vicino all'EMA20 su 5m (entro la soglia). Confermato su candela completamente chiusa — non sul prezzo live che può toccare EMA20 per un secondo durante un crollo.</div>
         </div>
       </div>
 
@@ -769,7 +779,27 @@ input[type=range]::-webkit-slider-thumb { box-shadow:0 0 0 4px rgba(0,82,255,0.1
         <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">RSI</div>
         <div>
           <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">RSI</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">RSI(14) su 5 minuti in zona neutrale (range configurabile). Evita ingressi quando la coin è in ipercomprato (RSI alto → già salita troppo) o ipervenduto (RSI basso → crollo in corso).</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">RSI(14) in zona pullback (40–58). Troppo alto = coin già ipercomprata, non è un vero pullback. Troppo basso = crollo in corso, non un rimbalzo.</div>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border)"></div>
+
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">BODY</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Candela bullish</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">L'ultima candela chiusa è <strong style="color:var(--text)">verde e con corpo solido</strong> (almeno 30% del range totale). Esclude doji e candele rosse — segnali che il mercato non ha ancora deciso la direzione o sta scendendo.</div>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border)"></div>
+
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">VOL</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Volume pullback</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">Il volume dell'ultima candela è <strong style="color:var(--text)">sotto la media delle ultime 20 candele</strong>. Un pullback silenzioso (basso volume) indica che è una pausa normale del trend — non un dump con forti vendite. Volume alto su pullback = segnale di pericolo.</div>
         </div>
       </div>
 
@@ -778,8 +808,8 @@ input[type=range]::-webkit-slider-thumb { box-shadow:0 0 0 4px rgba(0,82,255,0.1
       <div style="display:flex;gap:12px;align-items:flex-start">
         <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">R</div>
         <div>
-          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">R — Rischio/Rendimento</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">Lo stop loss viene calcolato automaticamente usando l'<strong style="color:var(--text)">ATR (volatilità media)</strong> e il minimo recente della candela. Se lo stop richiesto è troppo stretto (sotto il minimo configurabile) o troppo largo, il trade viene scartato. Questo garantisce un rapporto rischio/rendimento sensato prima ancora di entrare.</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Rischio/Rendimento</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">Stop loss calcolato su <strong style="color:var(--text)">1.5× ATR</strong> e minimi recenti di candele chiuse. Se lo stop è troppo stretto o troppo largo rispetto ai limiti configurati, il trade viene scartato.</div>
         </div>
       </div>
 
@@ -788,7 +818,7 @@ input[type=range]::-webkit-slider-thumb { box-shadow:0 0 0 4px rgba(0,82,255,0.1
       <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px">
         <div style="font-size:12px;color:var(--text2);line-height:1.6">
           <strong style="color:var(--green)">Verde</strong> = condizione soddisfatta &nbsp;·&nbsp; <strong style="color:var(--red)">Rosso</strong> = condizione non soddisfatta<br>
-          L'agente entra solo quando <strong style="color:var(--text)">tutti e 5 i segnali sono verdi</strong> contemporaneamente.
+          L'agente entra solo quando <strong style="color:var(--text)">tutti e 8 i segnali sono verdi</strong> contemporaneamente.
         </div>
       </div>
 
@@ -2977,7 +3007,7 @@ function renderMarket() {
         ><div class="ema-dot ${on?'on':'off'}"></div><span class="ema-dot-label">${label}</span></div>`;
       };
       const signalDot = ema.signal ? `<div class="ema-dot-wrap" style="margin-left:2px"><div class="ema-dot signal"></div><span class="ema-dot-label" style="color:var(--blue)">IN</span></div>` : '';
-      emaDots = `<div class="ema-dots">${dot(ema.trend1h_ok ?? true,'trend1h','1h')}${dot(ema.trend,'trend','15m')}${dot(ema.pullback,'pullback','pull')}${dot(ema.rsi_ok ?? true,'rsi','RSI')}${dot(ema.stop,'stop','R')}${signalDot}</div>`;
+      emaDots = `<div class="ema-dots">${dot(ema.trend1h_ok ?? true,'trend1h','1H')}${dot(ema.trend,'trend','15M')}${dot(ema.slope_ok ?? true,'slope','SLP')}${dot(ema.pullback,'pullback','PULL')}${dot(ema.rsi_ok ?? true,'rsi','RSI')}${dot(ema.body_ok ?? true,'body','BODY')}${dot(ema.vol_ok ?? true,'vol','VOL')}${dot(ema.stop,'stop','R')}${signalDot}</div>`;
     }
     return `<div class="mkt-row${isOpen?' mkt-row-open':''}">
       <div class="mkt-row-main">

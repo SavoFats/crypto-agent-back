@@ -505,8 +505,12 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
         "atr_5m":      atr_5m,
         "trend_ok":    trend_ok,
         "trend1h_ok":  trend1h_ok,
+        "slope_ok":    slope_ok,
         "pullback_ok": pullback_ok,
+        "fresh_ok":    fresh_ok,
         "rsi_ok":      rsi_ok,
+        "body_ok":     body_ok,
+        "vol_ok":      vol_ok,
         "stop_ok":     stop_ok,
         "rsi":         rsi_14,
     }
@@ -1387,7 +1391,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
 
     candidates  = []
     ema_skipped = 0
-    block_count = {"trend1h": 0, "trend": 0, "pullback": 0, "rsi": 0, "stop": 0}
+    block_count = {"trend1h": 0, "trend": 0, "slope": 0, "pullback": 0, "fresh": 0, "rsi": 0, "body": 0, "vol": 0, "stop": 0}
 
     for d in universe_sorted:
         sym = d["symbol"]
@@ -1396,11 +1400,15 @@ async def scan_and_trade(state: dict, user_id: int = None):
                                     trend1h_filter, rsi_filter, rsi_min, rsi_max, min_r)
             if not signal["signal"]:
                 ema_skipped += 1
-                if not signal.get("trend1h_ok", True): block_count["trend1h"] += 1
-                elif not signal["trend_ok"]:            block_count["trend"] += 1
-                elif not signal["pullback_ok"]:         block_count["pullback"] += 1
-                elif not signal.get("rsi_ok", True):   block_count["rsi"] += 1
-                elif not signal["stop_ok"]:             block_count["stop"] += 1
+                if not signal.get("trend1h_ok", True):  block_count["trend1h"] += 1
+                elif not signal["trend_ok"]:             block_count["trend"] += 1
+                elif not signal.get("slope_ok", True):  block_count["slope"] += 1
+                elif not signal["pullback_ok"]:          block_count["pullback"] += 1
+                elif not signal.get("fresh_ok", True):  block_count["fresh"] += 1
+                elif not signal.get("rsi_ok", True):    block_count["rsi"] += 1
+                elif not signal.get("body_ok", True):   block_count["body"] += 1
+                elif not signal.get("vol_ok", True):    block_count["vol"] += 1
+                elif not signal["stop_ok"]:              block_count["stop"] += 1
                 continue
             d["ema_reason"]  = signal["reason"]
             d["stop_price"]  = signal["stop_price"]
@@ -2085,8 +2093,11 @@ async def get_market(user_id: int = Depends(get_current_user)):
         item["ema"] = {
             "trend":      sig["trend_ok"],
             "trend1h_ok": sig["trend1h_ok"],
+            "slope_ok":   sig.get("slope_ok", True),
             "pullback":   sig["pullback_ok"],
             "rsi_ok":     sig["rsi_ok"],
+            "body_ok":    sig.get("body_ok", True),
+            "vol_ok":     sig.get("vol_ok", True),
             "stop":       sig["stop_ok"],
             "signal":     sig["signal"],
             "rsi":        sig.get("rsi", 50),
