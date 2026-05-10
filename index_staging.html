@@ -226,7 +226,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 .mkt-right { text-align:right; }
 .mkt-price-val { font-size:15px; font-weight:700; margin-bottom:4px; font-variant-numeric:tabular-nums; }
 .mkt-chg-pill { font-size:11px; font-weight:700; padding:3px 7px; border-radius:6px; display:inline-block; }
-.ema-dots { display:flex; align-items:center; gap:6px; margin-top:7px; }
+.ema-dots { display:flex; align-items:center; gap:5px; margin-top:7px; flex-wrap:wrap; }
 .ema-dot-wrap { display:flex; align-items:center; gap:3px; }
 .ema-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; transition:all 0.3s; }
 .ema-dot.on { background:var(--green); box-shadow:0 0 6px rgba(5,193,104,0.6); animation:pulse 2s infinite; }
@@ -3024,7 +3024,7 @@ function renderMarket() {
             <img ${getLogo(c.symbol) ? `src="${getLogo(c.symbol)}"` : ''} class="mkt-logo" data-logo-sym="${c.symbol}" id="logo-img-${c.symbol}" ${!getLogo(c.symbol) ? 'style="display:none"' : ''} onerror="this.onerror=null;this.style.display='none';document.getElementById('logo-ph-${c.symbol}').style.display='flex'">
             <div class="mkt-icon-placeholder" id="logo-ph-${c.symbol}" style="${getLogo(c.symbol) ? 'display:none' : 'display:flex'}">${c.symbol[0]}</div>
           </div>
-          <div>
+          <div style="min-width:0;flex:1">
             <div class="mkt-name" style="display:flex;align-items:center;justify-content:space-between;width:100%">
               <span>${fullName}${isOpen?'<span class="mkt-in-badge">IN</span>':''}</span>
               <button class="star-btn ${_watchlist.has(c.symbol)?'starred':''}" data-star-sym="${c.symbol}" onclick="event.stopPropagation();toggleWatchlist('${c.symbol}')" style="margin-left:4px;width:24px;height:24px">
@@ -3032,10 +3032,9 @@ function renderMarket() {
               </button>
             </div>
             <div class="mkt-sym-sub">${c.symbol} &middot; Vol $${fmtVol(vol)}</div>
-            ${emaDots}
           </div>
         </div>
-        <div class="mkt-right">
+        <div class="mkt-right" style="flex-shrink:0">
           <div class="mkt-price-val" id="mkt-price-${c.symbol}">${fmtPrice(c.price)}</div>
           <div style="display:flex;gap:5px;justify-content:flex-end;margin-top:5px">
             <div style="text-align:center">
@@ -3049,6 +3048,7 @@ function renderMarket() {
           </div>
         </div>
       </div>
+      ${emaDots}
     </div>`;
   }).join('');
 }
