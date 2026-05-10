@@ -20,6 +20,9 @@
   } else {
     document.documentElement.style.background='#eef1ff';
   }
+  // Fix iOS PWA viewport: window.innerHeight è corretto anche al primo render,
+  // mentre 100dvh può essere sbagliato in standalone mode.
+  document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
 })();
 </script>
 <style>
@@ -53,8 +56,8 @@
   --glass-border: rgba(255,255,255,0.7);
 }
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body { background:var(--bg); color:var(--text); font-family:var(--sans); height:100dvh; overflow:hidden; overflow-x:hidden; -webkit-font-smoothing:antialiased; }
-html { overflow-x:hidden; }
+html { overflow-x:hidden; height: -webkit-fill-available; }
+body { background:var(--bg); color:var(--text); font-family:var(--sans); height:100dvh; height:var(--app-height,100dvh); overflow:hidden; overflow-x:hidden; -webkit-font-smoothing:antialiased; }
 .pages { visibility:hidden; }
 .pages.ready { visibility:visible; }
 ::-webkit-scrollbar { width:0; }
@@ -2441,14 +2444,17 @@ async function startupSession() {
   } catch(e) {}
   restoreActiveTab();
   document.querySelector('.pages').classList.add('ready');
-  // iOS PWA: env(safe-area-inset-bottom) è 0 al primo render, si corregge
-  // solo dopo la prima interazione. Forza un repaint per anticiparlo.
+  // iOS PWA: aggiorna --app-height dopo che iOS ha finalizzato il layout
   if (window.navigator.standalone) {
     requestAnimationFrame(() => {
-      document.body.style.opacity = '0.9999';
-      requestAnimationFrame(() => { document.body.style.opacity = ''; });
+      document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
     });
   }
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => {
+      document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+    }, 300);
+  });
   startPolling();
 }
 
