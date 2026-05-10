@@ -254,7 +254,7 @@ user_sessions: dict = {}
 # }
 candle_data: dict = {}
 _candles_last_update: float = 0
-CANDLE_UPDATE_INTERVAL = 300  # secondi (5 minuti)
+CANDLE_UPDATE_INTERVAL = 120  # secondi (2 minuti)
 CANDLE_UNIVERSE_SIZE   = 30   # top N coin per volume
 
 def calc_ema(prices: list, period: int) -> float:
@@ -320,18 +320,18 @@ async def fetch_candles_for_symbol(sym: str, client: httpx.AsyncClient) -> dict 
             trs.append(max(h - l, abs(h - pc), abs(l - pc)))
         atr_5m = sum(trs[-14:]) / 14 if len(trs) >= 14 else 0.0
 
-        # Minimo delle ultime 3 candele 5m (per stop contestuale)
-        pullback_low_5m = min(lows5[-3:]) if len(lows5) >= 3 else lows5[-1]
+        # Minimo delle ultime 3 candele CHIUSE (escludi candela corrente aperta)
+        pullback_low_5m = min(lows5[-4:-1]) if len(lows5) >= 4 else lows5[-2]
 
-        # Volume medio ultime 20 candele 5m
-        vol_avg_20 = sum(volumes5[-20:]) / 20 if len(volumes5) >= 20 else 0.0
-        vol_last   = volumes5[-1]
+        # Volume: usa solo candele chiuse ([-2] = ultima chiusa, [-21:-1] = 20 chiuse)
+        vol_avg_20 = sum(volumes5[-21:-1]) / 20 if len(volumes5) >= 21 else 0.0
+        vol_last   = volumes5[-2] if len(volumes5) >= 2 else 0.0
 
-        # RSI(14) su 5m
-        rsi_14 = calc_rsi(closes5, 14)
+        # RSI(14) su 5m (su candele chiuse)
+        rsi_14 = calc_rsi(closes5[:-1], 14)
 
-        # Corpo ultima candela 5m: close - open
-        last_candle  = klines5[-1]
+        # Corpo dell'ultima candela CHIUSA (klines5[-2], non la corrente aperta [-1])
+        last_candle  = klines5[-2]
         last_open    = float(last_candle[1])
         last_close_c = float(last_candle[4])
         last_high    = float(last_candle[2])
@@ -340,14 +340,18 @@ async def fetch_candles_for_symbol(sym: str, client: httpx.AsyncClient) -> dict 
         candle_body  = last_close_c - last_open  # positivo = verde
         body_ratio   = abs(candle_body) / candle_range if candle_range > 0 else 0.0
 
+        # Slope EMA20: confronta EMA20 attuale con EMA20 di 3 candele fa
+        ema20_5m_cur   = calc_ema(closes5[:-1], 20)   # su candele chiuse
+        ema20_5m_prev3 = calc_ema(closes5[:-4], 20)   # EMA20 di 3 candele fa
+
         return {
-            "ema20_5m":         calc_ema(closes5,  20),
-            "ema50_5m":         calc_ema(closes5,  50),
-            "ema20_15m":        calc_ema(closes15, 20),
-            "ema50_15m":        calc_ema(closes15, 50),
-            "ema20_1h":         calc_ema(closes1h, 20),
-            "ema50_1h":         calc_ema(closes1h, 50),
-            "last_close_5m":    closes5[-1],
+            "ema20_5m":         ema20_5m_cur,
+            "ema50_5m":         calc_ema(closes5[:-1], 50),
+            "ema20_15m":        calc_ema(closes15[:-1], 20),
+            "ema50_15m":        calc_ema(closes15[:-1], 50),
+            "ema20_1h":         calc_ema(closes1h[:-1], 20),
+            "ema50_1h":         calc_ema(closes1h[:-1], 50),
+            "last_close_5m":    closes5[-2],   # ultimo close CONFERMATO (candela chiusa)
             "close_1h_ago":     closes1h[-2] if len(closes1h) >= 2 else 0.0,
             "atr_5m":           atr_5m,
             "pullback_low_5m":  pullback_low_5m,
@@ -356,6 +360,7 @@ async def fetch_candles_for_symbol(sym: str, client: httpx.AsyncClient) -> dict 
             "rsi_14":           rsi_14,
             "candle_body":      candle_body,
             "body_ratio":       body_ratio,
+            "ema20_5m_prev3":   ema20_5m_prev3,
             "updated_at":       time.time(),
         }
     except Exception as e:
@@ -418,24 +423,38 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
     rsi_14          = cd.get("rsi_14", 50.0)
     candle_body     = cd.get("candle_body", 0.0)
     body_ratio      = cd.get("body_ratio", 0.0)
+    last_close_5m   = cd.get("last_close_5m", current_price)
+    vol_avg_20      = cd.get("vol_avg_20", 0.0)
+    vol_last        = cd.get("vol_last", 0.0)
+    ema20_5m_prev3  = cd.get("ema20_5m_prev3", ema20_5m)
 
     # 1. Trend rialzista su 15min
     trend_ok = ema20_15m > ema50_15m
 
-    # 2. Trend rialzista su 1h (filtro superiore)
+    # 2. Trend rialzista su 1h
     trend1h_ok = (ema20_1h > ema50_1h) if (trend1h_filter and ema20_1h > 0 and ema50_1h > 0) else True
 
-    # 3. Prezzo vicino a EMA20 su 5min (pullback) — deve essere sopra o sulla media, non sotto
-    dist_from_ema20 = (current_price - ema20_5m) / ema20_5m  # positivo = sopra EMA, negativo = sotto
+    # 3. EMA20 5m in salita (slope positiva negli ultimi 15 minuti)
+    slope_ok = ema20_5m > ema20_5m_prev3
+
+    # 4. Pullback su CANDELA CHIUSA confermata (non su prezzo live)
+    dist_from_ema20 = (last_close_5m - ema20_5m) / ema20_5m
     pullback_ok = 0 <= dist_from_ema20 <= pullback_tolerance
 
-    # 4. RSI non ipercomprato
+    # 5. Prezzo live ancora vicino al close confermato (segnale non stantio, drift < 1%)
+    price_drift = abs(current_price - last_close_5m) / last_close_5m if last_close_5m > 0 else 0
+    fresh_ok = price_drift <= 0.01
+
+    # 6. RSI in zona pullback (40-58): né ipervenduto né ipercomprato
     rsi_ok = (rsi_min <= rsi_14 <= rsi_max) if rsi_filter else True
 
-    # 5. Candela 5m bullish con corpo solido (no entrata su candele rosse o doji)
+    # 7. Candela chiusa bullish con corpo solido (no doji, no candele rosse)
     body_ok = candle_body > 0 and body_ratio >= 0.30
 
-    # Stop contestuale
+    # 8. Volume pullback sotto la media (accumulo silenzioso, non dump)
+    vol_ok = (vol_last < vol_avg_20) if vol_avg_20 > 0 else True
+
+    # Stop contestuale su minimi di candele chiuse
     stop_from_low = pullback_low_5m
     stop_from_atr = current_price - atr_5m * 1.5 if atr_5m > 0 else 0.0
     stop_price    = min(stop_from_low, stop_from_atr) if stop_from_atr > 0 else stop_from_low
@@ -443,21 +462,28 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
     R = (current_price - stop_price) / current_price if stop_price > 0 else 0.0
     stop_ok = min_r <= R <= max_stop_pct
 
-    signal = trend_ok and trend1h_ok and pullback_ok and rsi_ok and body_ok and stop_ok
+    signal = trend_ok and trend1h_ok and slope_ok and pullback_ok and fresh_ok and rsi_ok and body_ok and vol_ok and stop_ok
 
     if not trend1h_ok:
         reason = f"no trend 1h (EMA20 {ema20_1h:.4f} < EMA50 {ema50_1h:.4f})"
     elif not trend_ok:
         reason = f"no trend 15m (EMA20 {ema20_15m:.4f} < EMA50 {ema50_15m:.4f})"
+    elif not slope_ok:
+        reason = f"EMA20 in discesa — trend in indebolimento"
     elif not pullback_ok:
         if dist_from_ema20 < 0:
-            reason = f"prezzo sotto EMA20 ({dist_from_ema20*100:.1f}%) — breakdown"
+            reason = f"last close sotto EMA20 ({dist_from_ema20*100:.1f}%) — breakdown"
         else:
-            reason = f"no pullback (dist EMA20: {dist_from_ema20*100:.1f}% > {pullback_tolerance*100:.1f}%)"
+            reason = f"no pullback (last close dist EMA20: {dist_from_ema20*100:.1f}% > {pullback_tolerance*100:.1f}%)"
+    elif not fresh_ok:
+        direction = "salito" if current_price > last_close_5m else "sceso"
+        reason = f"prezzo {direction} del {price_drift*100:.1f}% dal last close — segnale stantio"
     elif not rsi_ok:
-        reason = f"RSI fuori range ({rsi_14:.1f}, range {rsi_min:.0f}-{rsi_max:.0f})"
+        reason = f"RSI fuori zona pullback ({rsi_14:.1f}, zona {rsi_min:.0f}-{rsi_max:.0f})"
     elif not body_ok:
         reason = f"candela ribassista o doji (corpo {body_ratio*100:.0f}% del range)" if candle_body <= 0 else f"corpo troppo piccolo ({body_ratio*100:.0f}% < 30%)"
+    elif not vol_ok:
+        reason = f"volume troppo alto ({vol_last/vol_avg_20:.1f}x media) — possibile dump, non pullback"
     elif not stop_ok:
         if R > 0 and R < min_r:
             reason = f"R troppo piccolo ({R*100:.2f}% < {min_r*100:.1f}% min)"
@@ -468,8 +494,8 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
     else:
         reason = (f"OK | EMA20/50 1h: {ema20_1h:.4f}/{ema50_1h:.4f} | "
                   f"EMA20/50 15m: {ema20_15m:.4f}/{ema50_15m:.4f} | "
-                  f"dist EMA20: {dist_from_ema20*100:.2f}% | "
-                  f"RSI: {rsi_14:.1f} | corpo: {body_ratio*100:.0f}% | R: {R*100:.2f}%")
+                  f"dist EMA20: {dist_from_ema20*100:.2f}% | RSI: {rsi_14:.1f} | "
+                  f"corpo: {body_ratio*100:.0f}% | vol: {vol_last/vol_avg_20:.2f}x | R: {R*100:.2f}%")
 
     return {
         "signal":      signal,
@@ -1339,8 +1365,8 @@ async def scan_and_trade(state: dict, user_id: int = None):
     max_stop_pct  = cfg.get("maxStopPct", 0.05)
     trend1h_filter = cfg.get("trend1hFilter", True)
     rsi_filter    = cfg.get("rsiFilter", True)
-    rsi_min       = cfg.get("rsiMin", 35.0)
-    rsi_max       = cfg.get("rsiMax", 65.0)
+    rsi_min       = cfg.get("rsiMin", 40.0)
+    rsi_max       = cfg.get("rsiMax", 58.0)
     min_r         = cfg.get("minR", 0.01)
 
     # Se Revolut X: usa tutte le coin con candele disponibili (non filtriamo per _coinbase_products)
