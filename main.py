@@ -1128,7 +1128,13 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
     # Usa size originale per il PnL finale (già parte è stata realizzata a TP1)
     state["currentCapital"] += pos["size_remaining"] + pnl
     state["tradeCount"] += 1
-    if pnl > 0:
+
+    # P&L totale = secondo leg + TP1 parziale già realizzato
+    tp1_pnl   = pos.get("tp1_pnl", 0)
+    total_pnl = pnl + tp1_pnl
+    total_pct = total_pnl / pos["size"] * 100 if pos["size"] > 0 else pct
+
+    if total_pnl > 0:
         state["wins"] += 1
         state["consecutiveLosses"] = 0
     else:
@@ -1139,13 +1145,12 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
     trade_record = {
         "symbol": sym, "reason": reason,
         "entryPrice": pos["entryPrice"], "exitPrice": cur,
-        "pnl": pnl, "pct": pct, "time": datetime.utcnow().isoformat() + "Z",
+        "pnl": total_pnl, "pct": total_pct, "time": datetime.utcnow().isoformat() + "Z",
         "entryTime": pos["entryTime"], "durationMin": round(dur, 1),
         "size": pos["size"], "realMode": pos.get("realMode", False),
         "tp1_hit": pos.get("tp1_hit", False),
     }
     state["trades"].append(trade_record)
-    # Salva su DB se disponibile
     if db_pool and user_id:
         try:
             async with db_pool.acquire() as conn:
@@ -1156,7 +1161,7 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
                 """, user_id, sym,
                     float(pos["entryPrice"]), float(cur),
-                    float(pos["size"]), float(pnl), float(pct),
+                    float(pos["size"]), float(total_pnl), float(total_pct),
                     reason, bool(pos.get("tp1_hit", False)), float(round(dur, 1)),
                     pos["entryTime"], datetime.utcnow().isoformat() + "Z",
                     "real" if pos.get("realMode") else "sim"
@@ -1166,31 +1171,26 @@ async def exit_position(state: dict, pos: dict, reason: str, partial: bool = Fal
     state["positions"] = [p for p in state["positions"] if p is not pos]
     mode = "REALE" if pos.get("realMode") else "SIM"
     add_log(state, "sell", f"{reason} {mode}",
-        f"{sym} @ {_fp(cur)} | {pnl:+.2f}$ ({pct:+.2f}%) | fee: ${exit_fee:.2f} | {dur:.0f} min")
+        f"{sym} @ {_fp(cur)} | {total_pnl:+.2f}$ ({total_pct:+.2f}%) | fee: ${exit_fee:.2f} | {dur:.0f} min")
+    esito = "PROFITTO" if total_pnl >= 0 else "PERDITA"
     if pos.get("realMode"):
-        esito = "PROFITTO" if pnl >= 0 else "PERDITA"
         curr = "$"
-        tp1_pnl = pos.get("tp1_pnl", 0)
-        total_pnl = pnl + tp1_pnl
         if tp1_pnl:
             msg = ("VENDITA REALE - " + esito + "\n" + sym + " @ " + curr + f"{cur:.4f}" +
                    "\nP&L seconda metà: " + f"{pnl:+.2f}" + curr +
                    "\nP&L totale: " + f"{total_pnl:+.2f}" + curr)
         else:
             msg = ("VENDITA REALE - " + esito + "\n" + sym + " @ " + curr + f"{cur:.4f}" +
-                   "\nP&L: " + f"{pnl:+.2f}" + curr)
+                   "\nP&L: " + f"{total_pnl:+.2f}" + curr)
         await notify(state, msg)
     else:
-        esito = "PROFITTO" if pnl >= 0 else "PERDITA"
-        tp1_pnl = pos.get("tp1_pnl", 0)
-        total_pnl = pnl + tp1_pnl
         if tp1_pnl:
             sim_msg = ("VENDITA SIM - " + esito + "\n" + sym + " @ $" + f"{cur:.4f}" +
                        "\nP&L seconda metà: " + f"{pnl:+.2f}$" +
                        "\nP&L totale: " + f"{total_pnl:+.2f}$")
         else:
             sim_msg = ("VENDITA SIM - " + esito + "\n" + sym + " @ $" + f"{cur:.4f}" +
-                       "\nP&L: " + f"{pnl:+.2f}$")
+                       "\nP&L: " + f"{total_pnl:+.2f}$")
         await notify(state, sim_msg)
 
     # Controllo stop automatico per perdite consecutive
