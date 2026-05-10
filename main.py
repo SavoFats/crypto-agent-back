@@ -432,7 +432,7 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
 
     # Stop contestuale
     stop_from_low = pullback_low_5m
-    stop_from_atr = current_price - atr_5m if atr_5m > 0 else 0.0
+    stop_from_atr = current_price - atr_5m * 1.5 if atr_5m > 0 else 0.0
     stop_price    = min(stop_from_low, stop_from_atr) if stop_from_atr > 0 else stop_from_low
 
     R = (current_price - stop_price) / current_price if stop_price > 0 else 0.0
@@ -1329,7 +1329,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
     min_vol       = cfg.get("minVolume", 0)
     ema_filter    = cfg.get("emaFilter", True)
     pullback_tol  = cfg.get("pullbackTolerance", 0.02)
-    max_stop_pct  = cfg.get("maxStopPct", 0.025)
+    max_stop_pct  = cfg.get("maxStopPct", 0.05)
     trend1h_filter = cfg.get("trend1hFilter", True)
     rsi_filter    = cfg.get("rsiFilter", True)
     rsi_min       = cfg.get("rsiMin", 35.0)
@@ -2034,7 +2034,7 @@ async def get_market(user_id: int = Depends(get_current_user)):
     active_cfg = user_state.get("config", {})
 
     pullback_tol   = active_cfg.get("pullbackTolerance", 0.02)
-    max_stop_pct   = active_cfg.get("maxStopPct", 0.025)
+    max_stop_pct   = active_cfg.get("maxStopPct", 0.05)
     trend1h_filter = active_cfg.get("trend1hFilter", True)
     rsi_filter     = active_cfg.get("rsiFilter", True)
     rsi_min        = active_cfg.get("rsiMin", 35.0)
@@ -2193,7 +2193,7 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
             "emaFilter":           bool(cfg.get("emaFilter", True)),
             "pullbackTolerance":   float(cfg.get("pullbackTolerance", 0.02)),
             "volMultiplier":       float(cfg.get("volMultiplier", 1.2)),
-            "maxStopPct":          float(cfg.get("maxStopPct", 0.025)),
+            "maxStopPct":          float(cfg.get("maxStopPct", 0.05)),
             "maxTrades":           int(cfg.get("maxTrades", 0)),
             "maxConsecutiveLosses": int(cfg.get("maxConsecutiveLosses", 3)),
             "trend1hFilter":       bool(cfg.get("trend1hFilter", True)),
