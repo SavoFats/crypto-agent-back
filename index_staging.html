@@ -774,10 +774,10 @@ body.auth-active .tabbar { display:none !important; }
       <div style="border-top:1px solid var(--border)"></div>
 
       <div style="display:flex;gap:12px;align-items:flex-start">
-        <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">PULL</div>
+        <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">CROSS</div>
         <div>
-          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Pullback</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">L'<strong style="color:var(--text)">ultima candela chiusa</strong> è tornata vicino all'EMA20 su 5m (entro la soglia). Confermato su candela completamente chiusa — non sul prezzo live che può toccare EMA20 per un secondo durante un crollo.</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Crossover 15m</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">EMA20 ha appena superato EMA50 su 15m <strong style="color:var(--text)">nelle ultime 3 candele (45 min)</strong>. Cattura il momentum all'inizio del movimento, non dopo che ha già corso. Crossover vecchi vengono scartati.</div>
         </div>
       </div>
 
@@ -787,7 +787,7 @@ body.auth-active .tabbar { display:none !important; }
         <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">RSI</div>
         <div>
           <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">RSI</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">RSI(14) in zona pullback (40–58). Troppo alto = coin già ipercomprata, non è un vero pullback. Troppo basso = crollo in corso, non un rimbalzo.</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">RSI(14) in zona neutrale (40–65). Troppo alto = coin già ipercomprata post-crossover. Troppo basso = possibile falso segnale in downtrend.</div>
         </div>
       </div>
 
@@ -806,8 +806,8 @@ body.auth-active .tabbar { display:none !important; }
       <div style="display:flex;gap:12px;align-items:flex-start">
         <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">VOL</div>
         <div>
-          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Volume pullback</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">Il volume dell'ultima candela è <strong style="color:var(--text)">sotto la media delle ultime 20 candele</strong>. Un pullback silenzioso (basso volume) indica che è una pausa normale del trend — non un dump con forti vendite. Volume alto su pullback = segnale di pericolo.</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Volume crossover</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">Il volume dell'ultima candela è <strong style="color:var(--text)">sopra la media delle ultime 20 candele</strong>. Un crossover con volume alto conferma che il movimento è reale — bassa partecipazione su un crossover è spesso un falso segnale.</div>
         </div>
       </div>
 
@@ -1009,7 +1009,7 @@ body.auth-active .tabbar { display:none !important; }
       <div class="field-hint" style="margin-top:6px">Entra solo con RSI in zona neutrale — evita ipercomprato e ipervenduto</div>
     </div>
 
-    <div class="field">
+    <div class="field" style="display:none">
       <div class="field-label">Pullback Tolerance <span id="pullbackVal">2.0%</span></div>
       <input type="range" id="pullbackTolerance" min="0.1" max="3" value="2.0" step="0.1"
         oninput="document.getElementById('pullbackVal').textContent=parseFloat(this.value).toFixed(1)+'%'">
@@ -1022,7 +1022,7 @@ body.auth-active .tabbar { display:none !important; }
       <div class="field-label">Stop Loss massimo <span id="slVal">2.5%</span></div>
       <input type="range" id="stopLoss" min="0.5" max="5" value="2.5" step="0.1"
         oninput="document.getElementById('slVal').textContent=parseFloat(this.value).toFixed(1)+'%'">
-      <div class="field-hint">Scarta il trade se lo stop contestuale (ATR / low pullback) supera questa soglia</div>
+      <div class="field-hint">Scarta il trade se lo stop contestuale (ATR / minimi recenti) supera questa soglia</div>
     </div>
 
     <div class="field">
@@ -1082,7 +1082,7 @@ body.auth-active .tabbar { display:none !important; }
           <div style="font-size:10px;color:var(--text3);margin-top:3px">Posizione chiusa</div>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:10px;font-weight:500">R = distanza entry → stop contestuale (ATR / minimo pullback)</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:10px;font-weight:500">R = distanza entry → stop contestuale (1.5× ATR / minimi recenti)</div>
     </div>
 
     <div class="section-label">Gestione Rischio</div>
@@ -3066,7 +3066,7 @@ function renderMarket() {
         ><div class="ema-dot ${on?'on':'off'}"></div><span class="ema-dot-label">${label}</span></div>`;
       };
       const signalDot = ema.signal ? `<div class="ema-dot-wrap" style="margin-left:2px"><div class="ema-dot signal"></div><span class="ema-dot-label" style="color:var(--blue)">IN</span></div>` : '';
-      emaDots = `<div class="ema-dots">${dot(ema.trend1h_ok ?? true,'trend1h','1H')}${dot(ema.trend,'trend','15M')}${dot(ema.slope_ok ?? true,'slope','SLP')}${dot(ema.pullback,'pullback','PULL')}${dot(ema.rsi_ok ?? true,'rsi','RSI')}${dot(ema.body_ok ?? true,'body','BODY')}${dot(ema.vol_ok ?? true,'vol','VOL')}${dot(ema.stop,'stop','R')}${signalDot}</div>`;
+      emaDots = `<div class="ema-dots">${dot(ema.trend1h_ok ?? true,'trend1h','1H')}${dot(ema.trend,'trend','15M')}${dot(ema.crossover ?? false,'crossover','CROSS')}${dot(ema.slope_ok ?? true,'slope','SLP')}${dot(ema.rsi_ok ?? true,'rsi','RSI')}${dot(ema.body_ok ?? true,'body','BODY')}${dot(ema.vol_ok ?? true,'vol','VOL')}${dot(ema.stop,'stop','R')}${signalDot}</div>`;
     }
     return `<div class="mkt-row${isOpen?' mkt-row-open':''}">
       <div class="mkt-row-main">
@@ -3449,15 +3449,15 @@ const EMA_DOT_INFO = {
     descOn:  "EMA20 > EMA50 su 15min — mercato in tendenza rialzista sul medio termine.",
     descOff: "EMA20 < EMA50 su 15min — nessuna tendenza rialzista chiara. L'agente aspetta che il trend si formi.",
   },
-  pullback: {
-    name: 'Pullback',
-    descOn:  "Il prezzo è tornato vicino a EMA20 su 5min (entro la soglia configurata). Momento ottimale: trend attivo e prezzo che ritraccia.",
-    descOff: "Il prezzo è troppo lontano da EMA20 su 5min. O è già salito troppo (FOMO) o è sceso sotto. Attesa del ritracciamento.",
+  crossover: {
+    name: 'Crossover 15m',
+    descOn:  "EMA20 ha appena superato EMA50 su 15min (nelle ultime 3 candele = 45 min). Segnale di momentum: il trend si sta formando ora.",
+    descOff: "Nessun crossover fresco. O EMA20 è ancora sotto EMA50, oppure il crossover è avvenuto più di 45 min fa. L'ingresso sarebbe tardivo.",
   },
   volume: {
     name: 'Volume',
-    descOn:  "Volume ultima candela 5min superiore alla media 20 candele x moltiplicatore impostato. Conferma partecipazione reale.",
-    descOff: "Volume insufficiente sull'ultima candela 5min. Un rimbalzo su volume basso è spesso falso — serve partecipazione reale.",
+    descOn:  "Volume sopra la media delle ultime 20 candele — il crossover ha momentum reale. Conferma la forza del movimento.",
+    descOff: "Volume basso sul crossover — il movimento non è sostenuto da partecipazione reale. Rischio di falso segnale.",
   },
   rsi: {
     name: 'RSI',
@@ -3479,7 +3479,7 @@ function showDotTooltip(el) {
   const info = EMA_DOT_INFO[key];
   if (!info) return;
   // Mappa chiave dot → chiave nel cache ema
-  const keyMap = { trend1h: 'trend1h_ok', trend: 'trend', pullback: 'pullback', volume: 'volume', rsi: 'rsi_ok', stop: 'stop' };
+  const keyMap = { trend1h: 'trend1h_ok', trend: 'trend', crossover: 'crossover', volume: 'volume', rsi: 'rsi_ok', stop: 'stop' };
   const on = ema[keyMap[key] ?? key];
   const tip = document.getElementById('emaTooltip');
   const color = on ? 'var(--green)' : 'var(--red)';

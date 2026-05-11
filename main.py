@@ -348,14 +348,20 @@ async def fetch_candles_for_symbol(sym: str, client: httpx.AsyncClient) -> dict 
         ema20_1h_cur   = calc_ema(closes1h[:-1], 20)
         ema20_1h_prev3 = calc_ema(closes1h[:-4], 20)  # EMA20 di 3 ore fa
 
+        # Crossover 15m: EMA20 e EMA50 di 3 candele fa (45 min) per rilevare incrocio fresco
+        ema20_15m_prev3 = calc_ema(closes15[:-4], 20)
+        ema50_15m_prev3 = calc_ema(closes15[:-4], 50)
+
         return {
-            "ema20_5m":         ema20_5m_cur,
-            "ema50_5m":         calc_ema(closes5[:-1], 50),
-            "ema20_15m":        calc_ema(closes15[:-1], 20),
-            "ema50_15m":        calc_ema(closes15[:-1], 50),
-            "ema20_1h":         ema20_1h_cur,
-            "ema50_1h":         calc_ema(closes1h[:-1], 50),
-            "ema20_1h_prev3":   ema20_1h_prev3,
+            "ema20_5m":          ema20_5m_cur,
+            "ema50_5m":          calc_ema(closes5[:-1], 50),
+            "ema20_15m":         calc_ema(closes15[:-1], 20),
+            "ema50_15m":         calc_ema(closes15[:-1], 50),
+            "ema20_15m_prev3":   ema20_15m_prev3,
+            "ema50_15m_prev3":   ema50_15m_prev3,
+            "ema20_1h":          ema20_1h_cur,
+            "ema50_1h":          calc_ema(closes1h[:-1], 50),
+            "ema20_1h_prev3":    ema20_1h_prev3,
             "last_close_5m":    closes5[-2],   # ultimo close CONFERMATO (candela chiusa)
             "close_1h_ago":     closes1h[-2] if len(closes1h) >= 2 else 0.0,
             "atr_5m":           atr_5m,
@@ -410,32 +416,35 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
                    min_r: float = 0.01) -> dict:
     """
     Analizza il segnale EMA + RSI per una coin.
-    Condizioni: trend 1h, trend 15m, pullback su EMA20 5m, RSI, stop valido.
+    Condizioni: trend 1h, crossover EMA20/EMA50 su 15m (fresco ≤45 min), RSI, stop valido.
     """
     cd = candle_data.get(sym)
     if not cd:
         return {"signal": False, "reason": "no candle data", "stop_price": 0.0, "R": 0.0,
-                "trend_ok": False, "pullback_ok": False,
+                "trend_ok": False, "crossover_ok": False,
                 "stop_ok": False, "rsi_ok": True, "trend1h_ok": True, "atr_5m": 0.0}
 
-    ema20_15m       = cd["ema20_15m"]
-    ema50_15m       = cd["ema50_15m"]
-    ema20_5m        = cd["ema20_5m"]
-    ema20_1h        = cd.get("ema20_1h", 0)
-    ema50_1h        = cd.get("ema50_1h", 0)
-    atr_5m          = cd["atr_5m"]
-    pullback_low_5m = cd["pullback_low_5m"]
-    rsi_14          = cd.get("rsi_14", 50.0)
-    candle_body     = cd.get("candle_body", 0.0)
-    body_ratio      = cd.get("body_ratio", 0.0)
-    last_close_5m   = cd.get("last_close_5m", current_price)
-    vol_avg_20      = cd.get("vol_avg_20", 0.0)
-    vol_last        = cd.get("vol_last", 0.0)
-    ema20_5m_prev3  = cd.get("ema20_5m_prev3", ema20_5m)
-    ema20_1h_prev3  = cd.get("ema20_1h_prev3", ema20_1h)
+    ema20_15m        = cd["ema20_15m"]
+    ema50_15m        = cd["ema50_15m"]
+    ema20_15m_prev3  = cd.get("ema20_15m_prev3", ema20_15m)
+    ema50_15m_prev3  = cd.get("ema50_15m_prev3", ema50_15m)
+    ema20_5m         = cd["ema20_5m"]
+    ema20_1h         = cd.get("ema20_1h", 0)
+    ema50_1h         = cd.get("ema50_1h", 0)
+    atr_5m           = cd["atr_5m"]
+    pullback_low_5m  = cd["pullback_low_5m"]
+    rsi_14           = cd.get("rsi_14", 50.0)
+    candle_body      = cd.get("candle_body", 0.0)
+    body_ratio       = cd.get("body_ratio", 0.0)
+    last_close_5m    = cd.get("last_close_5m", current_price)
+    vol_avg_20       = cd.get("vol_avg_20", 0.0)
+    vol_last         = cd.get("vol_last", 0.0)
+    ema20_5m_prev3   = cd.get("ema20_5m_prev3", ema20_5m)
+    ema20_1h_prev3   = cd.get("ema20_1h_prev3", ema20_1h)
 
-    # 1. Trend rialzista su 15min
-    trend_ok = ema20_15m > ema50_15m
+    # 1. Crossover fresco su 15m: EMA20 ha appena superato EMA50 (finestra ≤45 min)
+    trend_ok     = ema20_15m > ema50_15m  # EMA20 sopra EMA50 ora
+    crossover_ok = trend_ok and (ema20_15m_prev3 <= ema50_15m_prev3)
 
     # 2. Trend rialzista su 1h (EMA20 > EMA50 E in salita)
     trend1h_ok = (ema20_1h > ema50_1h and ema20_1h > ema20_1h_prev3) if (trend1h_filter and ema20_1h > 0 and ema50_1h > 0) else True
@@ -443,22 +452,18 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
     # 3. EMA20 5m in salita (slope positiva negli ultimi 15 minuti)
     slope_ok = ema20_5m > ema20_5m_prev3
 
-    # 4. Pullback su CANDELA CHIUSA confermata (non su prezzo live)
-    dist_from_ema20 = (last_close_5m - ema20_5m) / ema20_5m
-    pullback_ok = 0 <= dist_from_ema20 <= pullback_tolerance
-
-    # 5. Prezzo live ancora vicino al close confermato (segnale non stantio, drift < 1%)
+    # 4. Prezzo live ancora vicino al close confermato (segnale non stantio, drift < 1%)
     price_drift = abs(current_price - last_close_5m) / last_close_5m if last_close_5m > 0 else 0
     fresh_ok = price_drift <= 0.01
 
-    # 6. RSI in zona pullback (40-58): né ipervenduto né ipercomprato
+    # 5. RSI in zona crossover (40-65): non ipercomprato
     rsi_ok = (rsi_min <= rsi_14 <= rsi_max) if rsi_filter else True
 
-    # 7. Candela chiusa bullish con corpo solido (no doji, no candele rosse)
+    # 6. Candela chiusa bullish con corpo solido (no doji, no candele rosse)
     body_ok = candle_body > 0 and body_ratio >= 0.30
 
-    # 8. Volume pullback sotto la media (accumulo silenzioso, non dump)
-    vol_ok = (vol_last < vol_avg_20) if vol_avg_20 > 0 else True
+    # 7. Volume sopra la media: il crossover deve avere momentum (non scambio silenzioso)
+    vol_ok = (vol_last >= vol_avg_20) if vol_avg_20 > 0 else True
 
     # Stop contestuale su minimi di candele chiuse
     stop_from_low = pullback_low_5m
@@ -468,31 +473,29 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
     R = (current_price - stop_price) / current_price if stop_price > 0 else 0.0
     stop_ok = min_r <= R <= max_stop_pct
 
-    signal = trend_ok and trend1h_ok and slope_ok and pullback_ok and fresh_ok and rsi_ok and body_ok and vol_ok and stop_ok
+    signal = crossover_ok and trend1h_ok and slope_ok and fresh_ok and rsi_ok and body_ok and vol_ok and stop_ok
 
     if not trend1h_ok:
         if ema20_1h <= ema50_1h:
             reason = f"no trend 1h (EMA20 {ema20_1h:.4f} < EMA50 {ema50_1h:.4f})"
         else:
             reason = f"slope 1h negativa (EMA20 in discesa: {ema20_1h:.4f} < prev {ema20_1h_prev3:.4f})"
-    elif not trend_ok:
-        reason = f"no trend 15m (EMA20 {ema20_15m:.4f} < EMA50 {ema50_15m:.4f})"
-    elif not slope_ok:
-        reason = f"EMA20 in discesa — trend in indebolimento"
-    elif not pullback_ok:
-        if dist_from_ema20 < 0:
-            reason = f"last close sotto EMA20 ({dist_from_ema20*100:.1f}%) — breakdown"
+    elif not crossover_ok:
+        if not trend_ok:
+            reason = f"no crossover (EMA20 {ema20_15m:.4f} < EMA50 {ema50_15m:.4f})"
         else:
-            reason = f"no pullback (last close dist EMA20: {dist_from_ema20*100:.1f}% > {pullback_tolerance*100:.1f}%)"
+            reason = f"crossover già vecchio (EMA20 > EMA50 da >45min | prev: {ema20_15m_prev3:.4f}/{ema50_15m_prev3:.4f})"
+    elif not slope_ok:
+        reason = f"EMA20 5m in discesa — momentum in indebolimento"
     elif not fresh_ok:
         direction = "salito" if current_price > last_close_5m else "sceso"
         reason = f"prezzo {direction} del {price_drift*100:.1f}% dal last close — segnale stantio"
     elif not rsi_ok:
-        reason = f"RSI fuori zona pullback ({rsi_14:.1f}, zona {rsi_min:.0f}-{rsi_max:.0f})"
+        reason = f"RSI fuori zona ({rsi_14:.1f}, zona {rsi_min:.0f}-{rsi_max:.0f})"
     elif not body_ok:
         reason = f"candela ribassista o doji (corpo {body_ratio*100:.0f}% del range)" if candle_body <= 0 else f"corpo troppo piccolo ({body_ratio*100:.0f}% < 30%)"
     elif not vol_ok:
-        reason = f"volume troppo alto ({vol_last/vol_avg_20:.1f}x media) — possibile dump, non pullback"
+        reason = f"volume basso ({vol_last/vol_avg_20:.2f}x media) — crossover senza momentum"
     elif not stop_ok:
         if R > 0 and R < min_r:
             reason = f"R troppo piccolo ({R*100:.2f}% < {min_r*100:.1f}% min)"
@@ -502,26 +505,26 @@ def get_ema_signal(sym: str, current_price: float, pullback_tolerance: float = 0
             reason = "stop non calcolabile"
     else:
         reason = (f"OK | EMA20/50 1h: {ema20_1h:.4f}/{ema50_1h:.4f} | "
-                  f"EMA20/50 15m: {ema20_15m:.4f}/{ema50_15m:.4f} | "
-                  f"dist EMA20: {dist_from_ema20*100:.2f}% | RSI: {rsi_14:.1f} | "
-                  f"corpo: {body_ratio*100:.0f}% | vol: {vol_last/vol_avg_20:.2f}x | R: {R*100:.2f}%")
+                  f"EMA20/50 15m: {ema20_15m:.4f}/{ema50_15m:.4f} (CROSS) | "
+                  f"RSI: {rsi_14:.1f} | corpo: {body_ratio*100:.0f}% | "
+                  f"vol: {vol_last/vol_avg_20:.2f}x | R: {R*100:.2f}%")
 
     return {
-        "signal":      signal,
-        "reason":      reason,
-        "stop_price":  round(stop_price, 8),
-        "R":           round(R, 6),
-        "atr_5m":      atr_5m,
-        "trend_ok":    trend_ok,
-        "trend1h_ok":  trend1h_ok,
-        "slope_ok":    slope_ok,
-        "pullback_ok": pullback_ok,
-        "fresh_ok":    fresh_ok,
-        "rsi_ok":      rsi_ok,
-        "body_ok":     body_ok,
-        "vol_ok":      vol_ok,
-        "stop_ok":     stop_ok,
-        "rsi":         rsi_14,
+        "signal":       signal,
+        "reason":       reason,
+        "stop_price":   round(stop_price, 8),
+        "R":            round(R, 6),
+        "atr_5m":       atr_5m,
+        "trend_ok":     trend_ok,
+        "crossover_ok": crossover_ok,
+        "trend1h_ok":   trend1h_ok,
+        "slope_ok":     slope_ok,
+        "fresh_ok":     fresh_ok,
+        "rsi_ok":       rsi_ok,
+        "body_ok":      body_ok,
+        "vol_ok":       vol_ok,
+        "stop_ok":      stop_ok,
+        "rsi":          rsi_14,
     }
 
 # ── rest of market data ───────────────────────────────────────────────────────
@@ -1403,7 +1406,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
 
     candidates  = []
     ema_skipped = 0
-    block_count = {"trend1h": 0, "trend": 0, "slope": 0, "pullback": 0, "fresh": 0, "rsi": 0, "body": 0, "vol": 0, "stop": 0}
+    block_count = {"trend1h": 0, "cross": 0, "slope": 0, "fresh": 0, "rsi": 0, "body": 0, "vol": 0, "stop": 0}
 
     for d in universe_sorted:
         sym = d["symbol"]
@@ -1412,15 +1415,14 @@ async def scan_and_trade(state: dict, user_id: int = None):
                                     trend1h_filter, rsi_filter, rsi_min, rsi_max, min_r)
             if not signal["signal"]:
                 ema_skipped += 1
-                if not signal.get("trend1h_ok", True):  block_count["trend1h"] += 1
-                elif not signal["trend_ok"]:             block_count["trend"] += 1
-                elif not signal.get("slope_ok", True):  block_count["slope"] += 1
-                elif not signal["pullback_ok"]:          block_count["pullback"] += 1
-                elif not signal.get("fresh_ok", True):  block_count["fresh"] += 1
-                elif not signal.get("rsi_ok", True):    block_count["rsi"] += 1
-                elif not signal.get("body_ok", True):   block_count["body"] += 1
-                elif not signal.get("vol_ok", True):    block_count["vol"] += 1
-                elif not signal["stop_ok"]:              block_count["stop"] += 1
+                if not signal.get("trend1h_ok", True):      block_count["trend1h"] += 1
+                elif not signal.get("crossover_ok", True):  block_count["cross"] += 1
+                elif not signal.get("slope_ok", True):      block_count["slope"] += 1
+                elif not signal.get("fresh_ok", True):      block_count["fresh"] += 1
+                elif not signal.get("rsi_ok", True):        block_count["rsi"] += 1
+                elif not signal.get("body_ok", True):       block_count["body"] += 1
+                elif not signal.get("vol_ok", True):        block_count["vol"] += 1
+                elif not signal["stop_ok"]:                  block_count["stop"] += 1
                 continue
             d["ema_reason"]  = signal["reason"]
             d["stop_price"]  = signal["stop_price"]
@@ -2103,17 +2105,17 @@ async def get_market(user_id: int = Depends(get_current_user)):
         sig = get_ema_signal(s, d["price"], pullback_tol, max_stop_pct,
                              trend1h_filter, rsi_filter, rsi_min, rsi_max, min_r)
         item["ema"] = {
-            "trend":      sig["trend_ok"],
-            "trend1h_ok": sig["trend1h_ok"],
-            "slope_ok":   sig.get("slope_ok", True),
-            "pullback":   sig["pullback_ok"],
-            "rsi_ok":     sig["rsi_ok"],
-            "body_ok":    sig.get("body_ok", True),
-            "vol_ok":     sig.get("vol_ok", True),
-            "stop":       sig["stop_ok"],
-            "signal":     sig["signal"],
-            "rsi":        sig.get("rsi", 50),
-            "reason":     sig["reason"],
+            "trend":        sig["trend_ok"],
+            "trend1h_ok":   sig.get("trend1h_ok", True),
+            "slope_ok":     sig.get("slope_ok", True),
+            "crossover":    sig.get("crossover_ok", False),
+            "rsi_ok":       sig["rsi_ok"],
+            "body_ok":      sig.get("body_ok", True),
+            "vol_ok":       sig.get("vol_ok", True),
+            "stop":         sig["stop_ok"],
+            "signal":       sig["signal"],
+            "rsi":          sig.get("rsi", 50),
+            "reason":       sig["reason"],
         }
         items.append(item)
 
