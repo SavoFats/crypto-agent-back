@@ -311,7 +311,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 .fdd-btn.active { border-color:var(--blue); color:var(--blue); background:var(--blue-dim); }
 .fdd-btn svg { flex-shrink:0; transition:transform 0.15s; }
 .fdd-btn.open svg { transform:rotate(180deg); }
-.fdd-menu { position:fixed; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:4px; z-index:500; min-width:140px; box-shadow:0 8px 24px rgba(0,0,0,0.12); display:none; }
+.fdd-menu { position:absolute; top:calc(100% + 4px); left:0; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:4px; z-index:500; min-width:140px; box-shadow:0 8px 24px rgba(0,0,0,0.12); display:none; }
 .fdd-menu.open { display:block; }
 .fdd-item { padding:9px 12px; font-size:13px; font-weight:600; color:var(--text2); border-radius:8px; cursor:pointer; transition:background 0.1s; white-space:nowrap; }
 .fdd-item:hover, .fdd-item:active { background:var(--surface2); }
@@ -2951,10 +2951,6 @@ function toggleFdd(id) {
   if (!isOpen) {
     menu.classList.add('open');
     btn.classList.add('open');
-    // Posiziona menu sotto il btn
-    const rect = btn.getBoundingClientRect();
-    menu.style.top = (rect.bottom + 4) + 'px';
-    menu.style.left = rect.left + 'px';
     setTimeout(() => document.addEventListener('click', closeFddOnOutside), 0);
   }
 }
