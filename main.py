@@ -348,9 +348,9 @@ async def fetch_candles_for_symbol(sym: str, client: httpx.AsyncClient) -> dict 
         ema20_1h_cur   = calc_ema(closes1h[:-1], 20)
         ema20_1h_prev3 = calc_ema(closes1h[:-4], 20)  # EMA20 di 3 ore fa
 
-        # Crossover 15m: EMA20 e EMA50 di 3 candele fa (45 min) per rilevare incrocio fresco
-        ema20_15m_prev3 = calc_ema(closes15[:-4], 20)
-        ema50_15m_prev3 = calc_ema(closes15[:-4], 50)
+        # Crossover 15m: EMA20 e EMA50 di 6 candele fa (90 min) per rilevare incrocio fresco
+        ema20_15m_prev3 = calc_ema(closes15[:-7], 20)
+        ema50_15m_prev3 = calc_ema(closes15[:-7], 50)
 
         return {
             "ema20_5m":          ema20_5m_cur,

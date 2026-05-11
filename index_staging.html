@@ -778,7 +778,7 @@ body.auth-active .tabbar { display:none !important; }
         <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">CROSS</div>
         <div>
           <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Crossover 15m</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">EMA20 ha appena superato EMA50 su 15m <strong style="color:var(--text)">nelle ultime 3 candele (45 min)</strong>. Cattura il momentum all'inizio del movimento, non dopo che ha già corso. Crossover vecchi vengono scartati.</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">EMA20 ha appena superato EMA50 su 15m <strong style="color:var(--text)">nelle ultime 6 candele (90 min)</strong>. Cattura il momentum all'inizio del movimento, non dopo che ha già corso. Crossover vecchi vengono scartati.</div>
         </div>
       </div>
 
@@ -3448,8 +3448,8 @@ const EMA_DOT_INFO = {
   },
   crossover: {
     name: 'Crossover 15m',
-    descOn:  "EMA20 ha appena superato EMA50 su 15min (nelle ultime 3 candele = 45 min). Segnale di momentum: il trend si sta formando ora.",
-    descOff: "Nessun crossover fresco. O EMA20 è ancora sotto EMA50, oppure il crossover è avvenuto più di 45 min fa. L'ingresso sarebbe tardivo.",
+    descOn:  "EMA20 ha appena superato EMA50 su 15min (nelle ultime 6 candele = 90 min). Segnale di momentum: il trend si sta formando ora.",
+    descOff: "Nessun crossover fresco. O EMA20 è ancora sotto EMA50, oppure il crossover è avvenuto più di 90 min fa. L'ingresso sarebbe tardivo.",
   },
   volume: {
     name: 'Volume',
