@@ -1516,6 +1516,153 @@ def _update_pnl(state: dict):
 _tg_last_update: int = 0
 _tg_poll_lock = asyncio.Lock()
 _tg_processed_ids: set = set()
+_revx_wizard: dict[str, dict] = {}  # chat_id → {step, uid, os, api_key}
+
+async def tg_send_keyboard(chat_id: str, text: str, buttons: list):
+    """Invia messaggio Telegram con inline keyboard."""
+    if not TELEGRAM_TOKEN:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+                json={"chat_id": chat_id, "text": text, "parse_mode": "HTML",
+                      "reply_markup": {"inline_keyboard": buttons}}
+            )
+    except Exception as e:
+        print(f"TG keyboard error: {e}")
+
+async def tg_answer_callback(callback_id: str):
+    """Risponde al callback_query per togliere il loading dal bottone."""
+    if not TELEGRAM_TOKEN:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/answerCallbackQuery",
+                json={"callback_query_id": callback_id}
+            )
+    except Exception:
+        pass
+
+async def handle_revx_wizard(chat_id: str, uid: int, event: str, data: str):
+    """
+    Gestisce il wizard /configrevx step-by-step.
+    event: 'start' | 'callback' | 'text'
+    data:  callback_data oppure testo inviato dall'utente
+    """
+    wizard = _revx_wizard.get(chat_id, {})
+    step   = wizard.get("step", "")
+
+    # ── START ──────────────────────────────────────────────────────────────────
+    if event == "start":
+        _revx_wizard[chat_id] = {"step": "os", "uid": uid}
+        await tg_send_keyboard(chat_id,
+            "⚙️ <b>Configurazione Revolut X</b>\n\n"
+            "Ti guido in 5 minuti.\n"
+            "Dovrai eseguire 2 comandi nel terminale del tuo computer.\n\n"
+            "Che sistema operativo usi?",
+            [[{"text": "🍎  macOS / Linux", "callback_data": "revx_os_mac"},
+              {"text": "🪟  Windows",        "callback_data": "revx_os_win"}]]
+        )
+        return
+
+    # ── CALLBACK (bottoni) ─────────────────────────────────────────────────────
+    if event == "callback":
+
+        if data in ("revx_os_mac", "revx_os_win"):
+            os_key = "mac" if data == "revx_os_mac" else "win"
+            _revx_wizard[chat_id]["os"]   = os_key
+            _revx_wizard[chat_id]["step"] = "terminal"
+            if os_key == "mac":
+                msg = ("📂 <b>Apri il Terminale</b>\n\n"
+                       "Vai in <b>Applicazioni → Utility → Terminale</b>\n"
+                       "oppure premi <b>Cmd+Spazio</b> e cerca <i>Terminale</i>.")
+            else:
+                msg = ("📂 <b>Apri PowerShell</b>\n\n"
+                       "Premi <b>Win+X</b> → <b>Windows PowerShell</b>\n"
+                       "oppure cerca <i>PowerShell</i> nel menu Start.\n\n"
+                       "⚠️ Verifica che OpenSSL sia installato:\n"
+                       "<code>openssl version</code>")
+            await tg_send_keyboard(chat_id, msg,
+                [[{"text": "✅  Aperto, continua →", "callback_data": "revx_step_cmd1"}]])
+
+        elif data == "revx_step_cmd1":
+            _revx_wizard[chat_id]["step"] = "cmd1"
+            await tg_send_keyboard(chat_id,
+                "1️⃣ <b>Genera la chiave privata</b>\n\n"
+                "Copia e incolla questo comando nel terminale, poi premi Invio:\n\n"
+                "<code>openssl genpkey -algorithm ed25519 -out private.pem</code>",
+                [[{"text": "✅  Fatto, continua →", "callback_data": "revx_step_cmd2"}]])
+
+        elif data == "revx_step_cmd2":
+            _revx_wizard[chat_id]["step"] = "cmd2"
+            await tg_send_keyboard(chat_id,
+                "2️⃣ <b>Genera la chiave pubblica</b>\n\n"
+                "Ora esegui questo comando:\n\n"
+                "<code>openssl pkey -in private.pem -pubout -out public.pem</code>\n\n"
+                "Trovi ora due file nella cartella corrente:\n"
+                "📄 <b>private.pem</b>  —  chiave privata (tienila al sicuro)\n"
+                "📄 <b>public.pem</b>   —  chiave pubblica",
+                [[{"text": "✅  Fatto, continua →", "callback_data": "revx_step_register"}]])
+
+        elif data == "revx_step_register":
+            _revx_wizard[chat_id]["step"] = "register"
+            await tg_send_keyboard(chat_id,
+                "3️⃣ <b>Registra la chiave su Revolut X</b>\n\n"
+                "1. Vai su <b>exchange.revolut.com</b> → <b>Profile → API Keys</b> (da browser)\n"
+                "2. Apri <b>public.pem</b> con un editor di testo\n"
+                "3. Incolla tutto il contenuto (incluse le righe BEGIN/END)\n"
+                "4. Revolut ti mostra una stringa di 64 caratteri — è il tuo API Key",
+                [[{"text": "✅  Ho l'API Key →", "callback_data": "revx_ask_apikey"}]])
+
+        elif data == "revx_ask_apikey":
+            _revx_wizard[chat_id]["step"] = "waiting_apikey"
+            await send_telegram_to(chat_id,
+                "4️⃣ <b>Incolla l'API Key</b>\n\n"
+                "Mandami la stringa da 64 caratteri che ti ha fornito Revolut X:")
+
+        return
+
+    # ── TEXT (input utente) ────────────────────────────────────────────────────
+    if event == "text":
+
+        if step == "waiting_apikey":
+            if len(data) >= 32:
+                _revx_wizard[chat_id]["api_key"] = data
+                _revx_wizard[chat_id]["step"]    = "waiting_pem"
+                await send_telegram_to(chat_id,
+                    "5️⃣ <b>Chiave privata</b>\n\n"
+                    "Apri il file <b>private.pem</b> con un editor di testo, "
+                    "copia <b>tutto il contenuto</b> (incluse le righe BEGIN/END) "
+                    "e mandamelo qui:")
+            else:
+                await send_telegram_to(chat_id,
+                    f"⚠️ L'API Key sembra troppo corta ({len(data)} caratteri — ne servono almeno 32). Riprova.")
+
+        elif step == "waiting_pem":
+            if "BEGIN" in data and "END" in data and len(data) > 100:
+                api_key = wizard.get("api_key", "")
+                try:
+                    if db_pool:
+                        async with db_pool.acquire() as conn:
+                            await conn.execute(
+                                "UPDATE users SET revx_key_id=$1, revx_private_key=$2 WHERE id=$3",
+                                encrypt_key(api_key), encrypt_key(data), uid
+                            )
+                    _revx_wizard.pop(chat_id, None)
+                    await send_telegram_to(chat_id,
+                        "🎉 <b>Configurazione completata!</b>\n\n"
+                        "Le tue chiavi Revolut X sono state salvate in modo sicuro.\n\n"
+                        "Torna su Zentra, vai su <b>Profilo → Configura Revolut X</b> "
+                        "e fai un test di connessione per verificare che tutto funzioni.")
+                except Exception as e:
+                    await send_telegram_to(chat_id, f"❌ Errore nel salvataggio. Riprova. ({e})")
+            else:
+                await send_telegram_to(chat_id,
+                    "⚠️ Formato non valido. Assicurati di copiare <b>tutto il contenuto</b> "
+                    "di private.pem, incluse le righe <code>-----BEGIN PRIVATE KEY-----</code> "
+                    "e <code>-----END PRIVATE KEY-----</code>.")
 
 async def poll_telegram():
     global _tg_last_update
@@ -1559,6 +1706,21 @@ async def poll_telegram():
                 _tg_processed_ids.add(uid_upd)
                 if len(_tg_processed_ids) > 500:
                     _tg_processed_ids.discard(min(_tg_processed_ids))
+
+                # ── callback_query (bottoni inline keyboard) ──────────────────
+                cq = update.get("callback_query")
+                if cq:
+                    cq_id   = cq["id"]
+                    cq_data = cq.get("data", "")
+                    cq_from = str(cq.get("from", {}).get("id", ""))
+                    await tg_answer_callback(cq_id)
+                    if cq_data.startswith("revx_") and cq_from in _revx_wizard:
+                        cq_uid = _revx_wizard[cq_from].get("uid")
+                        if cq_uid:
+                            await handle_revx_wizard(cq_from, cq_uid, "callback", cq_data)
+                    continue
+
+                # ── messaggi di testo normali ─────────────────────────────────
                 msg = update.get("message", {})
                 chat_id = str(msg.get("chat", {}).get("id", ""))
                 text = msg.get("text", "").strip()
@@ -1587,7 +1749,7 @@ async def poll_telegram():
                         if state:
                             state["telegram_chat_id"] = chat_id
                         await send_telegram_to(chat_id,
-                            "✅ Account collegato!\nOra puoi usare:\n/status — stato sessione\n/stop — ferma l'agente\n/close BTC — chiudi posizione")
+                            "✅ Account collegato!\nOra puoi usare:\n/status — stato sessione\n/stop — ferma l'agente\n/close BTC — chiudi posizione\n/configrevx — configura Revolut X guidato")
                     else:
                         already_linked = False
                         if db_pool:
@@ -1622,7 +1784,19 @@ async def poll_telegram():
 
                 state = user_sessions.get(uid)
 
-                if cmd == "/STATUS":
+                # Se wizard attivo e l'utente manda testo (non comando), gestisci come input wizard
+                is_command = text.startswith("/")
+                if chat_id in _revx_wizard:
+                    if not is_command:
+                        await handle_revx_wizard(chat_id, uid, "text", text)
+                        continue
+                    elif cmd != "/CONFIGREVX":
+                        # Qualsiasi altro comando cancella il wizard
+                        _revx_wizard.pop(chat_id, None)
+
+                if cmd == "/CONFIGREVX":
+                    await handle_revx_wizard(chat_id, uid, "start", "")
+                elif cmd == "/STATUS":
                     if state and state.get("running"):
                         pos_list = ", ".join([p["symbol"] for p in state["positions"]]) or "nessuna"
                         pnl = unrealized_pnl(state)
