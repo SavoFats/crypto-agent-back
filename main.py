@@ -21,7 +21,7 @@ _raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
 if not _raw_origins or _raw_origins.strip() == "*":
     import sys
     print("⚠️  WARNING: ALLOWED_ORIGINS non impostata o wildcard '*'. Imposta la variabile d'ambiente con il dominio Vercel in produzione.", file=sys.stderr)
-ALLOWED_ORIGINS = _raw_origins.split(",") if _raw_origins and _raw_origins.strip() != "*" else ["*"]
+ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in _raw_origins.split(",") if o.strip()] if _raw_origins and _raw_origins.strip() != "*" else ["*"]
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["GET","POST","DELETE"], allow_headers=["Authorization","Content-Type"], allow_credentials=True)
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
