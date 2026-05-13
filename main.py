@@ -119,10 +119,10 @@ def verify_token(token: str) -> int:
         raise HTTPException(status_code=401, detail="Token non valido")
 
 async def get_current_user(request: Request):
-    token = request.cookies.get("zentra_token")
-    if not token:
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Non autenticato")
-    return verify_token(token)
+    return verify_token(auth[7:])
 
 class RegisterRequest(BaseModel):
     username: str
@@ -2179,22 +2179,16 @@ async def register(req: RegisterRequest, request: Request):
                 req.username.lower(), pw_hash, req.username
             )
         token = create_token(row["id"])
-        response = Response(
-            content='{"username":"' + req.username + '","has_api_keys":false}',
-            media_type="application/json"
-        )
-        response.set_cookie("zentra_token", token, httponly=True, secure=True, samesite="none", max_age=86400*30)
-        return response
+        return {"token": token, "username": req.username, "has_api_keys": False}
     except asyncpg.UniqueViolationError:
         raise HTTPException(status_code=400, detail="Username già in uso")
 
 @app.post("/auth/logout")
-async def logout_user(response: Response):
-    response.delete_cookie("zentra_token", samesite="none", secure=True, httponly=True)
+async def logout_user():
     return {"ok": True}
 
 @app.post("/auth/login")
-async def login(req: LoginRequest, request: Request, response: Response):
+async def login(req: LoginRequest, request: Request):
     check_rate_limit(request, max_attempts=10, window=300, key_suffix="login")
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database non disponibile")
@@ -2213,8 +2207,7 @@ async def login(req: LoginRequest, request: Request, response: Response):
     async with db_pool.acquire() as conn2:
         urow = await conn2.fetchrow("SELECT display_name FROM users WHERE id = $1", row["id"])
     dname = (urow["display_name"] or req.username) if urow else req.username
-    response.set_cookie("zentra_token", token, httponly=True, secure=True, samesite="none", max_age=86400*30)
-    return {"username": dname, "has_api_keys": has_keys}
+    return {"token": token, "username": dname, "has_api_keys": has_keys}
 
 @app.post("/auth/save_keys")
 async def save_keys(req: ApiKeyRequest, request: Request, user_id: int = Depends(get_current_user)):
