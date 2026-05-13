@@ -2593,8 +2593,18 @@ async def chat(body: dict, request: Request, user_id: int = Depends(get_current_
     if not api_key:
         return {"error": "API key non configurata"}
     messages = body.get("messages", [])
+    if not isinstance(messages, list):
+        raise HTTPException(status_code=400, detail="Formato messaggi non valido")
     if len(messages) > 20:
         raise HTTPException(status_code=400, detail="Troppi messaggi nella richiesta")
+    # Valida ogni messaggio: solo role e content stringa, max 2000 char ciascuno
+    for m in messages:
+        if not isinstance(m, dict):
+            raise HTTPException(status_code=400, detail="Messaggio non valido")
+        if m.get("role") not in ("user", "assistant"):
+            raise HTTPException(status_code=400, detail="Role non valido")
+        if not isinstance(m.get("content"), str) or len(m["content"]) > 2000:
+            raise HTTPException(status_code=400, detail="Contenuto messaggio non valido o troppo lungo")
     state = get_session(user_id)
     positions = state["positions"]
     pnl = state["currentCapital"] - state["capital"]
@@ -2713,11 +2723,9 @@ async def test_revx(user_id: int = Depends(get_current_user)):
 
 @app.get("/debug_revx_ticker")
 async def debug_revx_ticker(request: Request, user_id: int = Depends(get_current_user)):
-    """Tickers Revolut X — admin only"""
-    auth = request.headers.get("Authorization", "")
-    if not SECRET_KEY or auth.removeprefix("Bearer ").strip() != SECRET_KEY:
+    """Tickers Revolut X — richiede X-Admin-Key: <SECRET_KEY>"""
+    if not SECRET_KEY or request.headers.get("X-Admin-Key", "") != SECRET_KEY:
         raise HTTPException(status_code=403, detail="Accesso negato")
-    """Tickers Revolut X — path corretto: /api/1.0/tickers"""
     try:
         async with db_pool.acquire() as conn:
             row = await conn.fetchrow("SELECT revx_key_id, revx_private_key FROM users WHERE id = $1", user_id)
@@ -2741,11 +2749,9 @@ async def debug_revx_ticker(request: Request, user_id: int = Depends(get_current
 
 @app.get("/debug_revx_candles")
 async def debug_revx_candles(request: Request, user_id: int = Depends(get_current_user)):
-    """Candles Revolut X — admin only"""
-    auth = request.headers.get("Authorization", "")
-    if not SECRET_KEY or auth.removeprefix("Bearer ").strip() != SECRET_KEY:
+    """Candles Revolut X — richiede X-Admin-Key: <SECRET_KEY>"""
+    if not SECRET_KEY or request.headers.get("X-Admin-Key", "") != SECRET_KEY:
         raise HTTPException(status_code=403, detail="Accesso negato")
-    """Candles Revolut X — path corretto: /api/1.0/candles/{symbol}"""
     try:
         async with db_pool.acquire() as conn:
             row = await conn.fetchrow("SELECT revx_key_id, revx_private_key FROM users WHERE id = $1", user_id)
