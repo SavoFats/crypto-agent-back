@@ -2182,7 +2182,8 @@ async def save_keys(req: ApiKeyRequest, request: Request, user_id: int = Depends
 # ── WATCHLIST ─────────────────────────────────────────────────────────────────
 
 @app.get("/watchlist")
-async def get_watchlist(user_id: int = Depends(get_current_user)):
+async def get_watchlist(request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=60, window=60, key_suffix="watchlist_get")
     if not db_pool:
         return {"symbols": []}
     async with db_pool.acquire() as conn:
@@ -2247,7 +2248,8 @@ async def save_avatar(req: AvatarRequest, request: Request, user_id: int = Depen
     return {"ok": True}
 
 @app.get("/auth/me")
-async def get_me(user_id: int = Depends(get_current_user)):
+async def get_me(request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=60, window=60, key_suffix="me")
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database non disponibile")
     async with db_pool.acquire() as conn:
@@ -2289,7 +2291,8 @@ async def set_sim_mode(req: SimModeRequest, user_id: int = Depends(get_current_u
 # ── TRADES HISTORY ─────────────────────────────────────────────────────────────
 
 @app.get("/trades_history")
-async def get_trades_history(user_id: int = Depends(get_current_user)):
+async def get_trades_history(request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=60, window=60, key_suffix="trades_history")
     if not db_pool:
         return {"trades": []}
     async with db_pool.acquire() as conn:
@@ -2302,7 +2305,8 @@ async def get_trades_history(user_id: int = Depends(get_current_user)):
 # ── TRADING ENDPOINTS ──────────────────────────────────────────────────────────
 
 @app.get("/status")
-async def get_status(user_id: int = Depends(get_current_user)):
+async def get_status(request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=120, window=60, key_suffix="status")
     state = get_session(user_id)
     unr     = unrealized_pnl(state)
     pos_val = sum(p.get("size_remaining", p["size"]) for p in state["positions"])
@@ -2328,7 +2332,8 @@ async def get_status(user_id: int = Depends(get_current_user)):
     }
 
 @app.get("/market")
-async def get_market(user_id: int = Depends(get_current_user)):
+async def get_market(request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=60, window=60, key_suffix="market")
     items = []
     # Usa la configurazione della sessione dell'utente richiedente, altrimenti default
     user_state = user_sessions.get(user_id, {})
@@ -2374,7 +2379,8 @@ async def get_market(user_id: int = Depends(get_current_user)):
     return {"market": result}
 
 @app.get("/trades")
-async def get_trades(user_id: int = Depends(get_current_user)):
+async def get_trades(request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=60, window=60, key_suffix="trades")
     state = get_session(user_id)
     # Combina trades in memoria + storico DB (rimuovi duplicati per time+symbol)
     mem_trades = state["trades"]
