@@ -1578,11 +1578,16 @@ async def handle_revx_wizard(chat_id: str, uid: int, event: str, data: str):
                 msg = ("📂 <b>Apri il Terminale</b>\n\n"
                        "Vai in <b>Applicazioni → Utility → Terminale</b>\n"
                        "oppure premi <b>Cmd+Spazio</b> e cerca <i>Terminale</i>.\n\n"
-                       "⚠️ <b>Nota per macOS:</b> il sistema usa LibreSSL che non supporta Ed25519. "
-                       "Dovrai installare OpenSSL reale:\n"
+                       "Quando è aperto, devi installare OpenSSL. "
+                       "Esegui questi comandi <b>uno alla volta</b> "
+                       "(copia → incolla → Invio → aspetta che finisca → poi il prossimo):\n\n"
+                       "① Installa Homebrew:\n"
+                       "<code>/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"</code>\n\n"
+                       "② Attiva Homebrew nella sessione corrente:\n"
+                       "<code>eval \"$(/opt/homebrew/bin/brew shellenv zsh)\"</code>\n\n"
+                       "③ Installa OpenSSL:\n"
                        "<code>brew install openssl</code>\n\n"
-                       "Se non hai Homebrew:\n"
-                       "<code>/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"</code>")
+                       "⚠️ Se Homebrew era già installato, esegui solo ② e ③.")
             else:
                 msg = ("📂 <b>Apri PowerShell</b>\n\n"
                        "Premi <b>Win+X</b> → <b>Windows PowerShell</b>\n"
@@ -1596,13 +1601,18 @@ async def handle_revx_wizard(chat_id: str, uid: int, event: str, data: str):
             _revx_wizard[chat_id]["step"] = "cmd1"
             os_key = wizard.get("os", "mac")
             if os_key == "mac":
-                cmd1 = "$(brew --prefix openssl)/bin/openssl genpkey -algorithm ed25519 -out private.pem"
+                msg = ("1️⃣ <b>Genera la chiave privata</b>\n\n"
+                       "Prima spostati sul Desktop (così trovi i file facilmente):\n"
+                       "<code>cd ~/Desktop</code>\n\n"
+                       "Poi esegui:\n"
+                       "<code>$(brew --prefix openssl)/bin/openssl genpkey -algorithm ed25519 -out private.pem</code>")
             else:
-                cmd1 = "openssl genpkey -algorithm ed25519 -out private.pem"
-            await tg_send_keyboard(chat_id,
-                f"1️⃣ <b>Genera la chiave privata</b>\n\n"
-                f"Copia e incolla questo comando nel terminale, poi premi Invio:\n\n"
-                f"<code>{cmd1}</code>",
+                msg = ("1️⃣ <b>Genera la chiave privata</b>\n\n"
+                       "Prima spostati sul Desktop:\n"
+                       "<code>cd %USERPROFILE%\\Desktop</code>\n\n"
+                       "Poi esegui:\n"
+                       "<code>openssl genpkey -algorithm ed25519 -out private.pem</code>")
+            await tg_send_keyboard(chat_id, msg,
                 [[{"text": "✅  Fatto, continua →", "callback_data": "revx_step_cmd2"}]])
 
         elif data == "revx_step_cmd2":
@@ -1614,9 +1624,9 @@ async def handle_revx_wizard(chat_id: str, uid: int, event: str, data: str):
                 cmd2 = "openssl pkey -in private.pem -pubout -out public.pem"
             await tg_send_keyboard(chat_id,
                 f"2️⃣ <b>Genera la chiave pubblica</b>\n\n"
-                f"Ora esegui questo comando:\n\n"
+                f"Esegui questo comando:\n\n"
                 f"<code>{cmd2}</code>\n\n"
-                f"Trovi ora due file nella cartella corrente:\n"
+                f"Trovi ora due file sul <b>Desktop</b>:\n"
                 f"📄 <b>private.pem</b>  —  chiave privata (tienila al sicuro)\n"
                 f"📄 <b>public.pem</b>   —  chiave pubblica",
                 [[{"text": "✅  Fatto, continua →", "callback_data": "revx_step_register"}]])
