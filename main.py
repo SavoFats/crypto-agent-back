@@ -18,7 +18,11 @@ import bcrypt
 from cryptography.fernet import Fernet
 
 app = FastAPI()
-ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
+if not _raw_origins or _raw_origins.strip() == "*":
+    import sys
+    print("⚠️  WARNING: ALLOWED_ORIGINS non impostata o wildcard '*'. Imposta la variabile d'ambiente con il dominio Vercel in produzione.", file=sys.stderr)
+ALLOWED_ORIGINS = _raw_origins.split(",") if _raw_origins and _raw_origins.strip() != "*" else ["*"]
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["GET","POST","DELETE"], allow_headers=["Authorization","Content-Type"])
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -45,7 +49,10 @@ def decrypt_key(text: str) -> str:
     try:
         return _get_fernet().decrypt(text.encode()).decode()
     except Exception:
-        return text  # fallback: restituisce così com'è (retrocompatibilità con valori plaintext esistenti)
+        # Fallback per valori legacy non cifrati — logga in modo da poterli rilevare
+        if len(text) > 8:
+            print(f"[DECRYPT] warning: valore non cifrato nel DB (len={len(text)}, prefix={text[:4]}...)")
+        return text
 
 def sanitize_error(e: Exception, *secrets: str) -> str:
     """Rimuove stringhe sensibili dal messaggio di errore prima di loggarlo."""
@@ -69,7 +76,7 @@ def create_token(user_id: int) -> str:
     return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
 
 def verify_token(token: str) -> int:
-    import base64
+    import base64, hmac as _hmac
     try:
         decoded = base64.urlsafe_b64decode(token.encode()).decode()
         parts = decoded.split(":")
@@ -78,7 +85,7 @@ def verify_token(token: str) -> int:
             raise HTTPException(status_code=401, detail="Token scaduto")
         payload = f"{user_id}:{expires}"
         expected = hashlib.sha256((payload + SECRET_KEY).encode()).hexdigest()[:32]
-        if sig != expected:
+        if not _hmac.compare_digest(sig, expected):
             raise HTTPException(status_code=401, detail="Token non valido")
         return user_id
     except (HTTPException, ValueError, IndexError, AttributeError):
@@ -2090,28 +2097,38 @@ async def restore_sessions_from_db(pool):
 
 # ── RATE LIMITING ─────────────────────────────────────────────────────────────
 from collections import defaultdict
-_login_attempts: dict = defaultdict(list)  # ip -> [timestamps]
+_rate_buckets: dict = defaultdict(list)  # key -> [timestamps]
 
-def check_rate_limit(ip: str, max_attempts: int = 10, window: int = 300):
-    """Max 10 tentativi per 5 minuti per IP."""
+def check_rate_limit(ip: str, max_attempts: int = 10, window: int = 300, key_suffix: str = ""):
+    """Rate limit per IP (+ suffisso opzionale per bucket separati per endpoint)."""
+    key = f"{ip}:{key_suffix}" if key_suffix else ip
     now = time.time()
-    attempts = [t for t in _login_attempts[ip] if now - t < window]
-    _login_attempts[ip] = attempts
+    attempts = [t for t in _rate_buckets[key] if now - t < window]
+    _rate_buckets[key] = attempts
     if len(attempts) >= max_attempts:
         raise HTTPException(status_code=429, detail="Troppi tentativi — riprova tra qualche minuto")
-    _login_attempts[ip].append(now)
+    _rate_buckets[key].append(now)
+
+# Alias usato da auth endpoints
+_login_attempts = _rate_buckets
 
 # ── AUTH ENDPOINTS ─────────────────────────────────────────────────────────────
 
 @app.post("/auth/register")
 async def register(req: RegisterRequest, request: Request):
-    check_rate_limit(request.client.host)
+    check_rate_limit(request.client.host, max_attempts=10, window=300, key_suffix="register")
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database non disponibile")
     if len(req.username) < 3:
-        raise HTTPException(status_code=400, detail="Username troppo corto")
+        raise HTTPException(status_code=400, detail="Username troppo corto (min 3 caratteri)")
+    if len(req.username) > 30:
+        raise HTTPException(status_code=400, detail="Username troppo lungo (max 30 caratteri)")
+    if not req.username.replace("_", "").replace("-", "").replace(".", "").isalnum():
+        raise HTTPException(status_code=400, detail="Username può contenere solo lettere, numeri, _, -, .")
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="Password troppo corta (min 6 caratteri)")
+    if len(req.password) > 128:
+        raise HTTPException(status_code=400, detail="Password troppo lunga (max 128 caratteri)")
     pw_hash = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
     try:
         async with db_pool.acquire() as conn:
@@ -2126,7 +2143,7 @@ async def register(req: RegisterRequest, request: Request):
 
 @app.post("/auth/login")
 async def login(req: LoginRequest, request: Request):
-    check_rate_limit(request.client.host)
+    check_rate_limit(request.client.host, max_attempts=10, window=300, key_suffix="login")
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database non disponibile")
     async with db_pool.acquire() as conn:
@@ -2147,9 +2164,14 @@ async def login(req: LoginRequest, request: Request):
     return {"token": token, "username": dname, "has_api_keys": has_keys}
 
 @app.post("/auth/save_keys")
-async def save_keys(req: ApiKeyRequest, user_id: int = Depends(get_current_user)):
+async def save_keys(req: ApiKeyRequest, request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=10, window=300, key_suffix="save_keys")
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database non disponibile")
+    if len(req.cb_key) < 10 or len(req.cb_key) > 512:
+        raise HTTPException(status_code=400, detail="API Key non valida")
+    if len(req.cb_secret) < 10 or len(req.cb_secret) > 2048:
+        raise HTTPException(status_code=400, detail="API Secret non valido")
     async with db_pool.acquire() as conn:
         await conn.execute(
             "UPDATE users SET cb_key = $1, cb_secret = $2 WHERE id = $3",
@@ -2168,27 +2190,35 @@ async def get_watchlist(user_id: int = Depends(get_current_user)):
     return {"symbols": [r["symbol"] for r in rows]}
 
 @app.post("/watchlist/{symbol}")
-async def add_watchlist(symbol: str, user_id: int = Depends(get_current_user)):
+async def add_watchlist(symbol: str, request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=30, window=60, key_suffix="watchlist")
+    sym = symbol.upper()
+    if not sym.isalnum() or len(sym) > 20:
+        raise HTTPException(status_code=400, detail="Simbolo non valido")
     if not db_pool:
         raise HTTPException(status_code=500, detail="DB non disponibile")
     async with db_pool.acquire() as conn:
         try:
             await conn.execute(
                 "INSERT INTO watchlist (user_id, symbol) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                user_id, symbol.upper()
+                user_id, sym
             )
         except Exception:
             pass
     return {"ok": True}
 
 @app.delete("/watchlist/{symbol}")
-async def remove_watchlist(symbol: str, user_id: int = Depends(get_current_user)):
+async def remove_watchlist(symbol: str, request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=30, window=60, key_suffix="watchlist")
+    sym = symbol.upper()
+    if not sym.isalnum() or len(sym) > 20:
+        raise HTTPException(status_code=400, detail="Simbolo non valido")
     if not db_pool:
         raise HTTPException(status_code=500, detail="DB non disponibile")
     async with db_pool.acquire() as conn:
         await conn.execute(
             "DELETE FROM watchlist WHERE user_id = $1 AND symbol = $2",
-            user_id, symbol.upper()
+            user_id, sym
         )
     return {"ok": True}
 
@@ -2198,12 +2228,17 @@ class AvatarRequest(BaseModel):
     avatar_b64: str
 
 @app.post("/auth/avatar")
-async def save_avatar(req: AvatarRequest, user_id: int = Depends(get_current_user)):
+async def save_avatar(req: AvatarRequest, request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=10, window=60, key_suffix="avatar")
     if not db_pool:
         raise HTTPException(status_code=500, detail="DB non disponibile")
-    # Limita a 500KB
     if len(req.avatar_b64) > 700000:
         raise HTTPException(status_code=400, detail="Immagine troppo grande (max 500KB)")
+    # Accetta solo prefissi base64 di immagini (JPEG, PNG, GIF, WebP)
+    allowed_prefixes = ("data:image/jpeg;base64,", "data:image/png;base64,",
+                        "data:image/gif;base64,", "data:image/webp;base64,")
+    if not any(req.avatar_b64.startswith(p) for p in allowed_prefixes):
+        raise HTTPException(status_code=400, detail="Formato immagine non supportato (usa JPEG, PNG, GIF o WebP)")
     async with db_pool.acquire() as conn:
         await conn.execute(
             "UPDATE users SET avatar_b64 = $1 WHERE id = $2",
@@ -2413,7 +2448,8 @@ async def telegram_unlink(user_id: int = Depends(get_current_user)):
     return {"ok": True}
 
 @app.post("/start")
-async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
+async def start_agent(body: dict, request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=10, window=60, key_suffix="start")
     state = get_session(user_id)
     if state["running"]:
         return {"error": "Already running"}
@@ -2423,6 +2459,26 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
         return {"error": "Capitale non valido (min $1, max $1,000,000)"}
     if float(cfg.get("allocPct", 0.20)) <= 0 or float(cfg.get("allocPct", 0.20)) > 1:
         return {"error": "Allocazione non valida (0-100%)"}
+    # Validazione parametri config
+    def _clamp(val, lo, hi, default):
+        try: return max(lo, min(hi, float(val)))
+        except (TypeError, ValueError): return default
+    def _clamp_int(val, lo, hi, default):
+        try: return max(lo, min(hi, int(val)))
+        except (TypeError, ValueError): return default
+    cfg["tp1R"]               = _clamp(cfg.get("tp1R", 2.0), 0.5, 10.0, 2.0)
+    cfg["tp2R"]               = _clamp(cfg.get("tp2R", 4.0), 1.0, 20.0, 4.0)
+    cfg["maxStopPct"]         = _clamp(cfg.get("maxStopPct", 0.05), 0.005, 0.20, 0.05)
+    cfg["minR"]               = _clamp(cfg.get("minR", 0.01), 0.001, 0.10, 0.01)
+    cfg["rsiMin"]             = _clamp(cfg.get("rsiMin", 35.0), 0.0, 100.0, 35.0)
+    cfg["rsiMax"]             = _clamp(cfg.get("rsiMax", 65.0), 0.0, 100.0, 65.0)
+    cfg["maxHoldHours"]       = _clamp(cfg.get("maxHoldHours", 4.0), 0.25, 72.0, 4.0)
+    cfg["cooldown"]           = _clamp(cfg.get("cooldown", 1.0), 0.0, 24.0, 1.0)
+    cfg["pullbackTolerance"]  = _clamp(cfg.get("pullbackTolerance", 0.02), 0.0, 0.10, 0.02)
+    cfg["capitalPct"]         = _clamp(cfg.get("capitalPct", 1.0), 0.01, 1.0, 1.0)
+    cfg["maxTrades"]          = _clamp_int(cfg.get("maxTrades", 0), 0, 100, 0)
+    cfg["maxConsecutiveLosses"] = _clamp_int(cfg.get("maxConsecutiveLosses", 3), 1, 20, 3)
+    cfg["sessionDuration"]    = _clamp_int(cfg.get("sessionDuration", 8), 1, 48, 8)
 
     cb_key, cb_secret, real_mode = "", "", False
     revx_key_id, revx_private_key, use_revx = "", "", False
@@ -2507,7 +2563,8 @@ async def start_agent(body: dict, user_id: int = Depends(get_current_user)):
     return {"ok": True}
 
 @app.post("/stop")
-async def stop_agent(user_id: int = Depends(get_current_user)):
+async def stop_agent(request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=10, window=60, key_suffix="stop")
     state = get_session(user_id)
     if not state["running"]:
         return {"error": "Not running"}
@@ -2520,7 +2577,8 @@ async def stop_agent(user_id: int = Depends(get_current_user)):
     return {"ok": True, "pnl": pnl}
 
 @app.post("/close_position/{symbol}")
-async def close_symbol(symbol: str, user_id: int = Depends(get_current_user)):
+async def close_symbol(symbol: str, request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=20, window=60, key_suffix="close")
     state = get_session(user_id)
     pos = next((p for p in state["positions"] if p["symbol"] == symbol), None)
     if not pos:
@@ -2608,9 +2666,18 @@ class RevxKeysRequest(BaseModel):
     private_key: str
 
 @app.post("/auth/save_revx_keys")
-async def save_revx_keys(req: RevxKeysRequest, user_id: int = Depends(get_current_user)):
+async def save_revx_keys(req: RevxKeysRequest, request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request.client.host, max_attempts=10, window=300, key_suffix="save_revx")
     if not db_pool:
         raise HTTPException(status_code=500, detail="DB non disponibile")
+    # API Key RevX: stringa alfanumerica di 64 caratteri
+    if not req.key_id or not req.key_id.isalnum() or len(req.key_id) != 64:
+        raise HTTPException(status_code=400, detail="API Key non valida (deve essere 64 caratteri alfanumerici)")
+    # Private key: deve iniziare con il header PEM corretto
+    if not req.private_key.strip().startswith("-----BEGIN"):
+        raise HTTPException(status_code=400, detail="Chiave privata non valida (formato PEM richiesto)")
+    if len(req.private_key) > 4096:
+        raise HTTPException(status_code=400, detail="Chiave privata troppo lunga")
     async with db_pool.acquire() as conn:
         await conn.execute(
             "UPDATE users SET revx_key_id = $1, revx_private_key = $2 WHERE id = $3",
@@ -2640,12 +2707,16 @@ async def test_revx(user_id: int = Depends(get_current_user)):
             for b in balances_raw
             if float(b.get("available", 0) or 0) > 0
         ]
-        return {"ok": True, "balances": balances, "raw": result}
+        return {"ok": True, "balances": balances}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 @app.get("/debug_revx_ticker")
-async def debug_revx_ticker(user_id: int = Depends(get_current_user)):
+async def debug_revx_ticker(request: Request, user_id: int = Depends(get_current_user)):
+    """Tickers Revolut X — admin only"""
+    auth = request.headers.get("Authorization", "")
+    if not SECRET_KEY or auth.removeprefix("Bearer ").strip() != SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Accesso negato")
     """Tickers Revolut X — path corretto: /api/1.0/tickers"""
     try:
         async with db_pool.acquire() as conn:
@@ -2669,7 +2740,11 @@ async def debug_revx_ticker(user_id: int = Depends(get_current_user)):
         return {"error": str(e)}
 
 @app.get("/debug_revx_candles")
-async def debug_revx_candles(user_id: int = Depends(get_current_user)):
+async def debug_revx_candles(request: Request, user_id: int = Depends(get_current_user)):
+    """Candles Revolut X — admin only"""
+    auth = request.headers.get("Authorization", "")
+    if not SECRET_KEY or auth.removeprefix("Bearer ").strip() != SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Accesso negato")
     """Candles Revolut X — path corretto: /api/1.0/candles/{symbol}"""
     try:
         async with db_pool.acquire() as conn:
