@@ -17,7 +17,7 @@ import asyncpg
 import bcrypt
 from cryptography.fernet import Fernet
 
-app = FastAPI()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 _raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
 if not _raw_origins or _raw_origins.strip() == "*":
     import sys
@@ -2099,8 +2099,20 @@ async def restore_sessions_from_db(pool):
 from collections import defaultdict
 _rate_buckets: dict = defaultdict(list)  # key -> [timestamps]
 
-def check_rate_limit(ip: str, max_attempts: int = 10, window: int = 300, key_suffix: str = ""):
-    """Rate limit per IP (+ suffisso opzionale per bucket separati per endpoint)."""
+def _get_client_ip(request: Request) -> str:
+    """Estrae l'IP reale del client, gestendo il reverse proxy di Railway."""
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        # X-Forwarded-For può essere una lista: "client, proxy1, proxy2"
+        # Prendiamo il primo IP (il client originale)
+        ip = forwarded.split(",")[0].strip()
+        if ip:
+            return ip
+    return request.client.host or "unknown"
+
+def check_rate_limit(request_or_ip, max_attempts: int = 10, window: int = 300, key_suffix: str = ""):
+    """Rate limit per IP reale (gestisce reverse proxy). Accetta Request o stringa IP."""
+    ip = _get_client_ip(request_or_ip) if isinstance(request_or_ip, Request) else request_or_ip
     key = f"{ip}:{key_suffix}" if key_suffix else ip
     now = time.time()
     attempts = [t for t in _rate_buckets[key] if now - t < window]
@@ -2116,7 +2128,7 @@ _login_attempts = _rate_buckets
 
 @app.post("/auth/register")
 async def register(req: RegisterRequest, request: Request):
-    check_rate_limit(request.client.host, max_attempts=10, window=300, key_suffix="register")
+    check_rate_limit(request, max_attempts=10, window=300, key_suffix="register")
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database non disponibile")
     if len(req.username) < 3:
@@ -2143,7 +2155,7 @@ async def register(req: RegisterRequest, request: Request):
 
 @app.post("/auth/login")
 async def login(req: LoginRequest, request: Request):
-    check_rate_limit(request.client.host, max_attempts=10, window=300, key_suffix="login")
+    check_rate_limit(request, max_attempts=10, window=300, key_suffix="login")
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database non disponibile")
     async with db_pool.acquire() as conn:
@@ -2165,7 +2177,7 @@ async def login(req: LoginRequest, request: Request):
 
 @app.post("/auth/save_keys")
 async def save_keys(req: ApiKeyRequest, request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=10, window=300, key_suffix="save_keys")
+    check_rate_limit(request, max_attempts=10, window=300, key_suffix="save_keys")
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database non disponibile")
     if len(req.cb_key) < 10 or len(req.cb_key) > 512:
@@ -2183,7 +2195,7 @@ async def save_keys(req: ApiKeyRequest, request: Request, user_id: int = Depends
 
 @app.get("/watchlist")
 async def get_watchlist(request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=60, window=60, key_suffix="watchlist_get")
+    check_rate_limit(request, max_attempts=60, window=60, key_suffix="watchlist_get")
     if not db_pool:
         return {"symbols": []}
     async with db_pool.acquire() as conn:
@@ -2192,7 +2204,7 @@ async def get_watchlist(request: Request, user_id: int = Depends(get_current_use
 
 @app.post("/watchlist/{symbol}")
 async def add_watchlist(symbol: str, request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=30, window=60, key_suffix="watchlist")
+    check_rate_limit(request, max_attempts=30, window=60, key_suffix="watchlist")
     sym = symbol.upper()
     if not sym.isalnum() or len(sym) > 20:
         raise HTTPException(status_code=400, detail="Simbolo non valido")
@@ -2210,7 +2222,7 @@ async def add_watchlist(symbol: str, request: Request, user_id: int = Depends(ge
 
 @app.delete("/watchlist/{symbol}")
 async def remove_watchlist(symbol: str, request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=30, window=60, key_suffix="watchlist")
+    check_rate_limit(request, max_attempts=30, window=60, key_suffix="watchlist")
     sym = symbol.upper()
     if not sym.isalnum() or len(sym) > 20:
         raise HTTPException(status_code=400, detail="Simbolo non valido")
@@ -2230,7 +2242,7 @@ class AvatarRequest(BaseModel):
 
 @app.post("/auth/avatar")
 async def save_avatar(req: AvatarRequest, request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=10, window=60, key_suffix="avatar")
+    check_rate_limit(request, max_attempts=10, window=60, key_suffix="avatar")
     if not db_pool:
         raise HTTPException(status_code=500, detail="DB non disponibile")
     if len(req.avatar_b64) > 700000:
@@ -2249,7 +2261,7 @@ async def save_avatar(req: AvatarRequest, request: Request, user_id: int = Depen
 
 @app.get("/auth/me")
 async def get_me(request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=60, window=60, key_suffix="me")
+    check_rate_limit(request, max_attempts=60, window=60, key_suffix="me")
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database non disponibile")
     async with db_pool.acquire() as conn:
@@ -2292,7 +2304,7 @@ async def set_sim_mode(req: SimModeRequest, user_id: int = Depends(get_current_u
 
 @app.get("/trades_history")
 async def get_trades_history(request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=60, window=60, key_suffix="trades_history")
+    check_rate_limit(request, max_attempts=60, window=60, key_suffix="trades_history")
     if not db_pool:
         return {"trades": []}
     async with db_pool.acquire() as conn:
@@ -2306,7 +2318,7 @@ async def get_trades_history(request: Request, user_id: int = Depends(get_curren
 
 @app.get("/status")
 async def get_status(request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=120, window=60, key_suffix="status")
+    check_rate_limit(request, max_attempts=120, window=60, key_suffix="status")
     state = get_session(user_id)
     unr     = unrealized_pnl(state)
     pos_val = sum(p.get("size_remaining", p["size"]) for p in state["positions"])
@@ -2333,7 +2345,7 @@ async def get_status(request: Request, user_id: int = Depends(get_current_user))
 
 @app.get("/market")
 async def get_market(request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=60, window=60, key_suffix="market")
+    check_rate_limit(request, max_attempts=60, window=60, key_suffix="market")
     items = []
     # Usa la configurazione della sessione dell'utente richiedente, altrimenti default
     user_state = user_sessions.get(user_id, {})
@@ -2380,7 +2392,7 @@ async def get_market(request: Request, user_id: int = Depends(get_current_user))
 
 @app.get("/trades")
 async def get_trades(request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=60, window=60, key_suffix="trades")
+    check_rate_limit(request, max_attempts=60, window=60, key_suffix="trades")
     state = get_session(user_id)
     # Combina trades in memoria + storico DB (rimuovi duplicati per time+symbol)
     mem_trades = state["trades"]
@@ -2423,9 +2435,10 @@ async def telegram_bot_info(user_id: int = Depends(get_current_user)):
     }
 
 @app.get("/telegram/link_code")
-async def telegram_link_code(user_id: int = Depends(get_current_user)):
+async def telegram_link_code(request: Request, user_id: int = Depends(get_current_user)):
     """Genera un codice temporaneo (5 min) da inviare al bot per collegare Telegram."""
-    import random, string
+    check_rate_limit(request, max_attempts=5, window=300, key_suffix="tg_link")
+    import string
     if not TELEGRAM_TOKEN:
         raise HTTPException(status_code=400, detail="Telegram non configurato su questo server")
     # Pulizia codici scaduti
@@ -2433,7 +2446,8 @@ async def telegram_link_code(user_id: int = Depends(get_current_user)):
     expired = [k for k, (_, exp) in _tg_link_codes.items() if exp < now]
     for k in expired:
         del _tg_link_codes[k]
-    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    alphabet = string.ascii_uppercase + string.digits
+    code = ''.join(secrets.choice(alphabet) for _ in range(8))
     _tg_link_codes[code] = (user_id, now + 300)
     return {
         "code": code,
@@ -2455,7 +2469,7 @@ async def telegram_unlink(user_id: int = Depends(get_current_user)):
 
 @app.post("/start")
 async def start_agent(body: dict, request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=10, window=60, key_suffix="start")
+    check_rate_limit(request, max_attempts=10, window=60, key_suffix="start")
     state = get_session(user_id)
     if state["running"]:
         return {"error": "Already running"}
@@ -2570,7 +2584,7 @@ async def start_agent(body: dict, request: Request, user_id: int = Depends(get_c
 
 @app.post("/stop")
 async def stop_agent(request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=10, window=60, key_suffix="stop")
+    check_rate_limit(request, max_attempts=10, window=60, key_suffix="stop")
     state = get_session(user_id)
     if not state["running"]:
         return {"error": "Not running"}
@@ -2584,7 +2598,7 @@ async def stop_agent(request: Request, user_id: int = Depends(get_current_user))
 
 @app.post("/close_position/{symbol}")
 async def close_symbol(symbol: str, request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=20, window=60, key_suffix="close")
+    check_rate_limit(request, max_attempts=20, window=60, key_suffix="close")
     state = get_session(user_id)
     pos = next((p for p in state["positions"] if p["symbol"] == symbol), None)
     if not pos:
@@ -2594,7 +2608,7 @@ async def close_symbol(symbol: str, request: Request, user_id: int = Depends(get
 
 @app.post("/chat")
 async def chat(body: dict, request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=20, window=60)
+    check_rate_limit(request, max_attempts=20, window=60)
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         return {"error": "API key non configurata"}
@@ -2664,7 +2678,8 @@ async def get_logs(request: Request, n: int = 50):
     return PlainTextResponse("\n".join(lines) if lines else "Nessun log disponibile.")
 
 @app.get("/candles_status")
-async def candles_status(user_id: int = Depends(get_current_user)):
+async def candles_status(request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request, max_attempts=20, window=60, key_suffix="candles_status")
     """Mostra stato aggiornamento candele e un esempio di segnale EMA."""
     sample = {}
     for sym in list(candle_data.keys())[:5]:
@@ -2683,7 +2698,7 @@ class RevxKeysRequest(BaseModel):
 
 @app.post("/auth/save_revx_keys")
 async def save_revx_keys(req: RevxKeysRequest, request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request.client.host, max_attempts=10, window=300, key_suffix="save_revx")
+    check_rate_limit(request, max_attempts=10, window=300, key_suffix="save_revx")
     if not db_pool:
         raise HTTPException(status_code=500, detail="DB non disponibile")
     # API Key RevX: stringa alfanumerica di 64 caratteri
@@ -2778,7 +2793,8 @@ async def debug_revx_candles(request: Request, user_id: int = Depends(get_curren
         return {"error": str(e)}
 
 @app.get("/test_coinbase")
-async def test_coinbase(user_id: int = Depends(get_current_user)):
+async def test_coinbase(request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request, max_attempts=10, window=60, key_suffix="test_coinbase")
     cb_key, cb_secret = _ENV_CB_KEY, _ENV_CB_SECRET
     if db_pool:
         try:
