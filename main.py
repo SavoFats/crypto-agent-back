@@ -1642,61 +1642,15 @@ async def handle_revx_wizard(chat_id: str, uid: int, event: str, data: str):
                 open_hint = ("Per leggere il contenuto di public.pem:\n"
                              "• PowerShell: <code>type %USERPROFILE%\\Desktop\\public.pem</code>\n"
                              "• Oppure: tasto destro sul file → <b>Apri con → Blocco Note</b>")
-            await tg_send_keyboard(chat_id,
+            _revx_wizard.pop(chat_id, None)
+            await send_telegram_to(chat_id,
                 f"3️⃣ <b>Registra la chiave su Revolut X</b>\n\n"
                 f"1. Vai su <b>exchange.revolut.com</b> → <b>Profile → API Keys</b> (da browser)\n"
                 f"2. {open_hint}\n"
                 f"3. Copia tutto il testo (incluse le righe BEGIN/END) e incollalo su Revolut X\n"
-                f"4. Revolut genera una stringa di <b>64 caratteri</b> — è il tuo API Key",
-                [[{"text": "✅  Ho l'API Key →", "callback_data": "revx_ask_apikey"}]])
-
-        elif data == "revx_ask_apikey":
-            _revx_wizard[chat_id]["step"] = "waiting_apikey"
-            await send_telegram_to(chat_id,
-                "4️⃣ <b>Incolla l'API Key</b>\n\n"
-                "Mandami la stringa da 64 caratteri che ti ha fornito Revolut X:")
-
-        return
-
-    # ── TEXT (input utente) ────────────────────────────────────────────────────
-    if event == "text":
-
-        if step == "waiting_apikey":
-            if len(data) >= 32:
-                _revx_wizard[chat_id]["api_key"] = data
-                _revx_wizard[chat_id]["step"]    = "waiting_pem"
-                await send_telegram_to(chat_id,
-                    "5️⃣ <b>Chiave privata</b>\n\n"
-                    "Apri il file <b>private.pem</b> con un editor di testo, "
-                    "copia <b>tutto il contenuto</b> (incluse le righe BEGIN/END) "
-                    "e mandamelo qui:")
-            else:
-                await send_telegram_to(chat_id,
-                    f"⚠️ L'API Key sembra troppo corta ({len(data)} caratteri — ne servono almeno 32). Riprova.")
-
-        elif step == "waiting_pem":
-            if "BEGIN" in data and "END" in data and len(data) > 100:
-                api_key = wizard.get("api_key", "")
-                try:
-                    if db_pool:
-                        async with db_pool.acquire() as conn:
-                            await conn.execute(
-                                "UPDATE users SET revx_key_id=$1, revx_private_key=$2 WHERE id=$3",
-                                encrypt_key(api_key), encrypt_key(data), uid
-                            )
-                    _revx_wizard.pop(chat_id, None)
-                    await send_telegram_to(chat_id,
-                        "🎉 <b>Configurazione completata!</b>\n\n"
-                        "Le tue chiavi Revolut X sono state salvate in modo sicuro.\n\n"
-                        "Torna su Zentra, vai su <b>Profilo → Configura Revolut X</b> "
-                        "e fai un test di connessione per verificare che tutto funzioni.")
-                except Exception as e:
-                    await send_telegram_to(chat_id, f"❌ Errore nel salvataggio. Riprova. ({e})")
-            else:
-                await send_telegram_to(chat_id,
-                    "⚠️ Formato non valido. Assicurati di copiare <b>tutto il contenuto</b> "
-                    "di private.pem, incluse le righe <code>-----BEGIN PRIVATE KEY-----</code> "
-                    "e <code>-----END PRIVATE KEY-----</code>.")
+                f"4. Revolut genera una stringa di <b>64 caratteri</b> — è il tuo API Key\n\n"
+                f"✅ <b>Ora torna su Zentra</b> → menu profilo → <b>Configura Revolut X</b> "
+                f"e inserisci lì l'API Key e la chiave privata.")
 
 async def poll_telegram():
     global _tg_last_update
