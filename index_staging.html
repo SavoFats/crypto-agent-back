@@ -593,45 +593,60 @@ body.auth-active .tabbar { display:none !important; }
       <div style="margin-left:8px;font-size:11px;font-weight:600;color:var(--text3)" id="revxStepLabel">Passo 1 di 3</div>
     </div>
 
-    <!-- STEP 1: guida creazione chiavi -->
+    <!-- STEP 1: genera chiavi nel terminale -->
     <div id="revxStep1">
-      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Crea le API Key su Revolut X</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6">Hai bisogno di due cose: un <strong>Key ID</strong> e un file <strong>private_key.pem</strong>. Si generano in pochi clic dal sito di Revolut X.</div>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Genera le chiavi sul tuo computer</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6">Revolut X usa crittografia Ed25519 — devi generare tu le chiavi localmente con due comandi nel terminale.</div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px">
         <div style="display:flex;gap:12px;align-items:flex-start">
           <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">1</div>
-          <div style="font-size:13px;color:var(--text2);line-height:1.5">Apri <strong style="color:var(--text)">Revolut X</strong> dal browser (non dall'app)</div>
+          <div>
+            <div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:6px">Apri il <strong style="color:var(--text)">Terminale</strong> (Mac/Linux) o <strong style="color:var(--text)">PowerShell</strong> (Windows) ed esegui questi due comandi:</div>
+            <div style="background:var(--surface3);border-radius:8px;padding:8px 12px;font-family:monospace;font-size:12px;color:var(--text);display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span>openssl genpkey -algorithm ed25519 -out private.pem</span>
+              <button onclick="navigator.clipboard.writeText('openssl genpkey -algorithm ed25519 -out private.pem');this.textContent='✓';setTimeout(()=>this.textContent='Copia',1500)" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0;margin-left:8px">Copia</button>
+            </div>
+            <div style="background:var(--surface3);border-radius:8px;padding:8px 12px;font-family:monospace;font-size:12px;color:var(--text);display:flex;align-items:center;justify-content:space-between">
+              <span>openssl pkey -in private.pem -pubout -out public.pem</span>
+              <button onclick="navigator.clipboard.writeText('openssl pkey -in private.pem -pubout -out public.pem');this.textContent='✓';setTimeout(()=>this.textContent='Copia',1500)" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0;margin-left:8px">Copia</button>
+            </div>
+          </div>
         </div>
         <div style="display:flex;gap:12px;align-items:flex-start">
           <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">2</div>
-          <div style="font-size:13px;color:var(--text2);line-height:1.5">Vai in <strong style="color:var(--text)">Account → API Keys → Create API Key</strong></div>
-        </div>
-        <div style="display:flex;gap:12px;align-items:flex-start">
-          <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">3</div>
-          <div style="font-size:13px;color:var(--text2);line-height:1.5">Dai un nome alla chiave (es. <em>Zentra</em>) e clicca <strong style="color:var(--text)">Generate</strong></div>
-        </div>
-        <div style="display:flex;gap:12px;align-items:flex-start">
-          <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">4</div>
-          <div style="font-size:13px;color:var(--text2);line-height:1.5">Revolut ti mostra il <strong style="color:var(--text)">Key ID</strong> e ti fa scaricare il file <strong style="color:var(--text)">private_key.pem</strong> — tienili a portata di mano</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.5">Trovi due file nuovi nella cartella corrente: <strong style="color:var(--text)">private.pem</strong> (chiave privata) e <strong style="color:var(--text)">public.pem</strong> (chiave pubblica). Tienili a portata di mano.</div>
         </div>
       </div>
-      <div style="background:rgba(0,82,255,0.08);border:1px solid rgba(0,82,255,0.2);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:18px">
-        💡 Il file <code>.pem</code> viene scaricato <strong>una volta sola</strong> al momento della creazione — non perderlo.
+      <div style="background:rgba(246,70,93,0.08);border:1px solid rgba(246,70,93,0.2);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:18px">
+        🔒 <strong style="color:var(--text)">private.pem è segreto.</strong> Non condividerlo mai. Zentra lo usa solo per firmare le richieste sul tuo dispositivo — non viene mai inviato ai nostri server in chiaro.
       </div>
       <div class="modal-actions" style="grid-template-columns:1fr 1fr">
         <button class="modal-btn cancel" onclick="closeRevxModal()">Annulla</button>
-        <button class="modal-btn confirm-real" style="background:var(--blue)" onclick="revxGoStep(2)">Ho le chiavi →</button>
+        <button class="modal-btn confirm-real" style="background:var(--blue)" onclick="revxGoStep(2)">Ho i file →</button>
       </div>
     </div>
 
-    <!-- STEP 2: Key ID -->
+    <!-- STEP 2: registra su Revolut X e inserisci API Key -->
     <div id="revxStep2" style="display:none">
-      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Inserisci il Key ID</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6">Il Key ID è una stringa corta che trovi sulla pagina delle API Key di Revolut X, accanto al nome che hai scelto.</div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:12px;font-family:monospace;color:var(--text3);margin-bottom:14px;word-break:break-all">
-        Es: <span style="color:var(--blue)">2LDsmJVAh7Qk9fXpT3mR...</span>
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Registra la chiave su Revolut X</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">1</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.5">Vai su <strong style="color:var(--blue)">exchange.revolut.com</strong> → <strong style="color:var(--text)">Profile → API Keys</strong> (da browser, non dall'app)</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">2</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.5">Apri <strong style="color:var(--text)">public.pem</strong> con un editor di testo e incolla tutto il contenuto (incluse le righe <code>-----BEGIN/END PUBLIC KEY-----</code>)</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">3</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.5">Revolut genera il tuo <strong style="color:var(--text)">API Key</strong> — una stringa di 64 caratteri. Copiala e incollala qui sotto:</div>
+        </div>
       </div>
-      <input type="text" id="revxKeyId" placeholder="Incolla qui il Key ID" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;color:var(--text);font-size:14px;font-family:var(--sans);outline:none;box-sizing:border-box;margin-bottom:6px" oninput="revxValidateStep2()">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:11px;font-family:monospace;color:var(--text3);margin-bottom:10px;word-break:break-all">
+        Es: <span style="color:var(--blue)">M1VKFtwB0M9C9QJO7goPlwrOytrJsSNE19txsmpsWIKz7xYu3f8aNucIyynAhYBy</span>
+      </div>
+      <input type="text" id="revxKeyId" placeholder="Incolla qui l'API Key (64 caratteri)" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;color:var(--text);font-size:13px;font-family:monospace;outline:none;box-sizing:border-box;margin-bottom:6px" oninput="revxValidateStep2()">
       <div style="font-size:11px;color:var(--red);min-height:16px;margin-bottom:14px" id="revxKeyIdErr"></div>
       <div class="modal-actions" style="grid-template-columns:1fr 1fr">
         <button class="modal-btn cancel" onclick="revxGoStep(1)">← Indietro</button>
@@ -642,7 +657,7 @@ body.auth-active .tabbar { display:none !important; }
     <!-- STEP 3: chiave privata -->
     <div id="revxStep3" style="display:none">
       <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Carica la chiave privata</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6">Carica il file <strong>private_key.pem</strong> scaricato da Revolut X, oppure incolla il contenuto manualmente.</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6">Carica il file <strong>private.pem</strong> generato al passo 1, oppure incolla il contenuto manualmente.</div>
 
       <!-- Upload file -->
       <div id="revxDropZone" onclick="document.getElementById('revxFileInput').click()" ondragover="event.preventDefault();this.style.borderColor='var(--blue)';this.style.background='var(--blue-dim)'" ondragleave="this.style.borderColor='var(--border2)';this.style.background=''" ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='';revxLoadFile({target:{files:event.dataTransfer.files}})" style="border:2px dashed var(--border2);border-radius:14px;padding:20px;text-align:center;cursor:pointer;margin-bottom:12px;transition:border-color 0.2s,background 0.2s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border2)'">
@@ -1746,12 +1761,12 @@ function revxValidateStep2() {
   const val = document.getElementById('revxKeyId').value.trim();
   const btn = document.getElementById('revxStep2Btn');
   const err = document.getElementById('revxKeyIdErr');
-  if (val.length >= 8) {
+  if (val.length >= 32) {
     btn.disabled = false;
     err.textContent = '';
   } else {
     btn.disabled = true;
-    err.textContent = val.length > 0 ? 'Il Key ID sembra troppo corto' : '';
+    err.textContent = val.length > 0 ? `API Key troppo corta (${val.length} caratteri — ne servono almeno 32)` : '';
   }
 }
 
