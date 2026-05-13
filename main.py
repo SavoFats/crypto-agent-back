@@ -1633,12 +1633,21 @@ async def handle_revx_wizard(chat_id: str, uid: int, event: str, data: str):
 
         elif data == "revx_step_register":
             _revx_wizard[chat_id]["step"] = "register"
+            os_key = wizard.get("os", "mac")
+            if os_key == "mac":
+                open_hint = ("Per leggere il contenuto di public.pem:\n"
+                             "• Terminale: <code>cat ~/Desktop/public.pem</code>\n"
+                             "• Oppure: tasto destro sul file → <b>Apri con → TextEdit</b>")
+            else:
+                open_hint = ("Per leggere il contenuto di public.pem:\n"
+                             "• PowerShell: <code>type %USERPROFILE%\\Desktop\\public.pem</code>\n"
+                             "• Oppure: tasto destro sul file → <b>Apri con → Blocco Note</b>")
             await tg_send_keyboard(chat_id,
-                "3️⃣ <b>Registra la chiave su Revolut X</b>\n\n"
-                "1. Vai su <b>exchange.revolut.com</b> → <b>Profile → API Keys</b> (da browser)\n"
-                "2. Apri <b>public.pem</b> con un editor di testo\n"
-                "3. Incolla tutto il contenuto (incluse le righe BEGIN/END)\n"
-                "4. Revolut ti mostra una stringa di 64 caratteri — è il tuo API Key",
+                f"3️⃣ <b>Registra la chiave su Revolut X</b>\n\n"
+                f"1. Vai su <b>exchange.revolut.com</b> → <b>Profile → API Keys</b> (da browser)\n"
+                f"2. {open_hint}\n"
+                f"3. Copia tutto il testo (incluse le righe BEGIN/END) e incollalo su Revolut X\n"
+                f"4. Revolut genera una stringa di <b>64 caratteri</b> — è il tuo API Key",
                 [[{"text": "✅  Ho l'API Key →", "callback_data": "revx_ask_apikey"}]])
 
         elif data == "revx_ask_apikey":
