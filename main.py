@@ -2100,14 +2100,14 @@ from collections import defaultdict
 _rate_buckets: dict = defaultdict(list)  # key -> [timestamps]
 
 def _get_client_ip(request: Request) -> str:
-    """Estrae l'IP reale del client, gestendo il reverse proxy di Railway."""
+    """Estrae l'IP reale del client, gestendo il reverse proxy di Railway.
+    Prende l'ULTIMO IP dalla catena X-Forwarded-For: è quello aggiunto dal proxy
+    di Railway (trusted), non quello eventualmente iniettato dal client."""
     forwarded = request.headers.get("X-Forwarded-For", "")
     if forwarded:
-        # X-Forwarded-For può essere una lista: "client, proxy1, proxy2"
-        # Prendiamo il primo IP (il client originale)
-        ip = forwarded.split(",")[0].strip()
-        if ip:
-            return ip
+        ips = [ip.strip() for ip in forwarded.split(",") if ip.strip()]
+        if ips:
+            return ips[-1]  # ultimo = aggiunto dal proxy Railway, non dal client
     return request.client.host or "unknown"
 
 def check_rate_limit(request_or_ip, max_attempts: int = 10, window: int = 300, key_suffix: str = ""):
@@ -2137,8 +2137,8 @@ async def register(req: RegisterRequest, request: Request):
         raise HTTPException(status_code=400, detail="Username troppo lungo (max 30 caratteri)")
     if not req.username.replace("_", "").replace("-", "").replace(".", "").isalnum():
         raise HTTPException(status_code=400, detail="Username può contenere solo lettere, numeri, _, -, .")
-    if len(req.password) < 6:
-        raise HTTPException(status_code=400, detail="Password troppo corta (min 6 caratteri)")
+    if len(req.password) < 8:
+        raise HTTPException(status_code=400, detail="Password troppo corta (min 8 caratteri)")
     if len(req.password) > 128:
         raise HTTPException(status_code=400, detail="Password troppo lunga (max 128 caratteri)")
     pw_hash = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
@@ -2868,7 +2868,8 @@ async def debug_coinbase(user_id: int = Depends(get_current_user)):
         return {"error": str(e)}
 
 @app.get("/logos")
-async def get_logos(user_id: int = Depends(get_current_user)):
+async def get_logos(request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request, max_attempts=30, window=60, key_suffix="logos")
     # Loghi di qualità per le coin principali (CoinGecko CDN)
     KNOWN = {
         "BTC":"https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
