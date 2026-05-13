@@ -7,7 +7,6 @@ import json
 import secrets
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Depends, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 import httpx
@@ -17,12 +16,43 @@ import bcrypt
 from cryptography.fernet import Fernet
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-_raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
-if not _raw_origins or _raw_origins.strip() == "*":
-    import sys
-    print("⚠️  WARNING: ALLOWED_ORIGINS non impostata o wildcard '*'. Imposta la variabile d'ambiente con il dominio Vercel in produzione.", file=sys.stderr)
-ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in _raw_origins.split(",") if o.strip()] if _raw_origins and _raw_origins.strip() != "*" else ["*"]
-app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["GET","POST","DELETE"], allow_headers=["Authorization","Content-Type"], allow_credentials=True)
+
+import sys
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "").strip()
+if not _raw_origins or _raw_origins == "*":
+    print("⚠️  WARNING: ALLOWED_ORIGINS non impostata o wildcard. Imposta il dominio Vercel in produzione.", file=sys.stderr)
+    _ORIGIN_SET: set[str] = set()
+    _ORIGINS_ANY = True
+else:
+    _ORIGIN_SET = {o.strip().rstrip("/") for o in _raw_origins.split(",") if o.strip()}
+    _ORIGINS_ANY = False
+    print(f"[CORS] origini consentite: {_ORIGIN_SET}", file=sys.stderr)
+
+_CORS_METHODS = "GET, POST, DELETE, OPTIONS"
+_CORS_HEADERS = "Authorization, Content-Type"
+
+@app.middleware("http")
+async def cors_middleware(request: Request, call_next):
+    origin = request.headers.get("origin", "")
+    allowed = _ORIGINS_ANY or (origin in _ORIGIN_SET)
+
+    if request.method == "OPTIONS":
+        resp = Response(status_code=204)
+        if allowed and origin:
+            resp.headers["Access-Control-Allow-Origin"] = origin
+            resp.headers["Access-Control-Allow-Credentials"] = "true"
+            resp.headers["Access-Control-Allow-Methods"] = _CORS_METHODS
+            resp.headers["Access-Control-Allow-Headers"] = _CORS_HEADERS
+            resp.headers["Access-Control-Max-Age"] = "0"
+            resp.headers["Vary"] = "Origin"
+        return resp
+
+    response = await call_next(request)
+    if allowed and origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 SECRET_KEY = os.environ.get("SECRET_KEY", "")
