@@ -3741,6 +3741,16 @@ function updatePlanUI() {
 
 function applyPlanConfig() {
   const isFree = _plan === 'free';
+
+  // Forza valori corretti per piano free (100% alloc, 2h max)
+  if (isFree) {
+    const ap = document.getElementById('allocPct');
+    if (ap) { ap.value = 100; updateAlloc(); }
+    const sd = document.getElementById('sessionDuration');
+    const sdLbl = document.getElementById('sessionVal');
+    if (sd && sdLbl) { sd.value = 2; sdLbl.textContent = '2h'; }
+  }
+
   const proIds = ['allocPct','sessionDuration','trend1hOnBtn','trend1hOffBtn','btcEmaOnBtn','btcEmaOffBtn',
                   'pullbackTolerance','rsiMin','rsiMax','tp1R','tp2R',
                   'trailingOnBtn','trailingOffBtn','cooldown','maxTrades','maxHoldHours','minR'];
@@ -3748,8 +3758,10 @@ function applyPlanConfig() {
     const el = document.getElementById(id);
     if (!el) return;
     el.disabled = isFree;
-    if (isFree) el.closest('.field-row, .field-group, div')?.classList?.add('pro-locked');
+    el.style.opacity = isFree ? '0.38' : '';
+    el.style.pointerEvents = isFree ? 'none' : '';
   });
+
   // Mostra/nascondi label PRO sui campi bloccati
   document.querySelectorAll('.pro-lock-label').forEach(l => {
     l.style.display = isFree ? 'inline' : 'none';
@@ -3777,9 +3789,8 @@ function applyPlanConfig() {
       <div style="font-size:13px;color:var(--text2);line-height:1.8">
         ✓ Sessioni illimitate al giorno<br>
         ✓ Posizioni multiple contemporaneamente<br>
-        ✓ Tutte le coin del mercato<br>
-        ✓ Filtri avanzati (Trend 1h, BTC EMA, TP custom)<br>
-        ✓ Allocazione personalizzabile
+        ✓ Filtri personalizzabili (Trend 1h, BTC EMA, RSI, TP)<br>
+        ✓ Allocazione per trade personalizzabile
       </div>
     </div>
     <button class="btn-primary" style="width:100%;padding:14px;font-size:16px;margin-bottom:10px" onclick="upgradeToProClick()">Passa a Pro</button>
