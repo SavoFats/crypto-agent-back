@@ -221,7 +221,7 @@ input[type=number]:disabled { opacity:0.5; cursor:not-allowed; }
 .mkt-logo-wrap { position:relative; width:34px; height:34px; flex-shrink:0; }
 .mkt-name { font-size:14px; font-weight:700; display:flex; align-items:center; gap:6px; }
 .mkt-sym-sub { font-size:11px; color:var(--text3); margin-top:2px; font-weight:500; }
-.mkt-in-badge { font-size:9px; background:var(--blue); color:#fff; border-radius:4px; padding:1px 5px; font-weight:700; }
+.mkt-in-badge { font-size:9px; background:var(--blue); color:#fff; border-radius:4px; padding:1px 5px; font-weight:700; margin-left:6px; vertical-align:middle; }
 .mkt-vol { font-size:11px; color:var(--text3); margin-top:2px; font-weight:500; }
 .mkt-row { padding:12px 0; border-bottom:1px solid var(--border); }
 .mkt-row:last-child { border-bottom:none; }
@@ -1846,14 +1846,18 @@ async function saveRevxKeys() {
       document.getElementById('revxModal').classList.remove('open');
       // Test connessione
       const tr = await fetch(API + '/test_revx', { headers: authHeaders() });
-      const td = await tr.json();
-      if (td.ok) {
-        const saldi = td.balances.length > 0
-          ? td.balances.map(b => parseFloat(b.available).toFixed(2) + ' ' + b.currency).join(' · ')
-          : 'nessun saldo disponibile';
-        showToast('Revolut X connesso — ' + saldi);
+      if (tr.status === 429) {
+        showToast('Chiavi salvate — test connessione non disponibile, riprova tra poco', true);
       } else {
-        showToast('Chiavi salvate ma connessione fallita: ' + (td.error || 'errore sconosciuto'), true);
+        const td = await tr.json();
+        if (td.ok) {
+          const saldi = td.balances.length > 0
+            ? td.balances.map(b => parseFloat(b.available).toFixed(2) + ' ' + b.currency).join(' · ')
+            : 'nessun saldo disponibile';
+          showToast('Revolut X connesso — ' + saldi);
+        } else {
+          showToast('Chiavi salvate ma connessione fallita: ' + (td.error || 'errore sconosciuto'), true);
+        }
       }
     }
   } catch(e) {
@@ -3257,22 +3261,26 @@ async function loadHomeBalance() {
       subEl.textContent = 'Recupero saldo Revolut X';
       try {
         const r = await fetch(API + '/test_revx', { headers: authHeaders() });
-        const d = await r.json();
-        if (d.ok && d.balances && d.balances.length > 0) {
-          const usd = d.balances.find(b => b.currency === 'USD' || b.currency === 'USDC');
-          const eur = d.balances.find(b => b.currency === 'EUR');
-          const best = usd || eur || d.balances[0];
-          const bal = parseFloat(best.available);
-          const sym = best.currency;
-          valEl.textContent = (sym === 'EUR' ? '€' : '$') + bal.toFixed(2);
-          subEl.textContent = sym + ' disponibili su Revolut X';
-          const tbd = document.getElementById('totalBalanceDisplay');
-          if (tbd) { tbd.textContent = bal.toFixed(2) + ' ' + sym + ' (Revolut X)'; tbd.style.color = 'var(--green)'; }
-          const cap = document.getElementById('capital');
-          if (cap) cap.dataset.total = bal;
-          updateCapitalPct();
+        if (r.status === 429) {
+          valEl.textContent = '--'; subEl.textContent = 'Riprova tra poco';
         } else {
-          valEl.textContent = '--'; subEl.textContent = 'Errore Revolut X';
+          const d = await r.json();
+          if (d.ok && d.balances && d.balances.length > 0) {
+            const usd = d.balances.find(b => b.currency === 'USD' || b.currency === 'USDC');
+            const eur = d.balances.find(b => b.currency === 'EUR');
+            const best = usd || eur || d.balances[0];
+            const bal = parseFloat(best.available);
+            const sym = best.currency;
+            valEl.textContent = (sym === 'EUR' ? '€' : '$') + bal.toFixed(2);
+            subEl.textContent = sym + ' disponibili su Revolut X';
+            const tbd = document.getElementById('totalBalanceDisplay');
+            if (tbd) { tbd.textContent = bal.toFixed(2) + ' ' + sym + ' (Revolut X)'; tbd.style.color = 'var(--green)'; }
+            const cap = document.getElementById('capital');
+            if (cap) cap.dataset.total = bal;
+            updateCapitalPct();
+          } else {
+            valEl.textContent = '--'; subEl.textContent = 'Errore Revolut X';
+          }
         }
       } catch(e) { valEl.textContent = '--'; subEl.textContent = 'Connessione fallita'; }
     } else {

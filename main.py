@@ -2771,7 +2771,7 @@ async def save_revx_keys(req: RevxKeysRequest, request: Request, user_id: int = 
 
 @app.get("/test_revx")
 async def test_revx(request: Request, user_id: int = Depends(get_current_user)):
-    check_rate_limit(request, max_attempts=5, window=60, key_suffix="test_revx")
+    check_rate_limit(request, max_attempts=15, window=60, key_suffix="test_revx")
     if not db_pool:
         return {"ok": False, "error": "DB non disponibile"}
     async with db_pool.acquire() as conn:
