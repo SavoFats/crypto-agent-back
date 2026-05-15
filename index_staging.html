@@ -3785,10 +3785,56 @@ function applyPlanConfig() {
   const p = new URLSearchParams(location.search);
   if (p.get('upgraded') === '1') {
     history.replaceState({}, '', location.pathname);
-    setTimeout(() => showToast('🎉 Benvenuto in Pro! Abbonamento attivato.'), 800);
+    // Polling: webhook Stripe è asincrono, aspetta max 12s che il piano diventi pro
+    setTimeout(async () => {
+      for (let i = 0; i < 6; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const r = await fetch(API + '/billing/status', { headers: authHeaders() });
+          if (r.ok) {
+            const d = await r.json();
+            STRIPE_ENABLED = d.stripe_enabled || STRIPE_ENABLED;
+            if (d.plan === 'pro') {
+              _plan = 'pro';
+              _sessionsToday = d.sessions_today ?? _sessionsToday;
+              updatePlanUI();
+              break;
+            }
+          }
+        } catch(e) {}
+      }
+      showProWelcome();
+    }, 800);
   }
 })();
+
+function showProWelcome() {
+  document.getElementById('proWelcomeModal').classList.add('open');
+}
+function closeProWelcome() {
+  document.getElementById('proWelcomeModal').classList.remove('open');
+  updatePlanUI();
+}
 </script>
+
+<!-- WELCOME PRO MODAL -->
+<div class="modal-overlay" id="proWelcomeModal">
+  <div class="modal-card" style="max-width:380px;text-align:center;padding:36px 28px">
+    <div style="font-size:52px;margin-bottom:4px">✦</div>
+    <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:#f59e0b;margin-bottom:10px">ZENTRA PRO</div>
+    <div style="font-size:22px;font-weight:700;margin-bottom:8px;letter-spacing:-0.02em">Benvenuto nel piano Pro</div>
+    <div style="font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.5">Il tuo abbonamento è attivo. Hai ora accesso completo a tutte le funzionalità.</div>
+    <div style="background:var(--surface2);border-radius:12px;padding:16px;margin-bottom:24px;text-align:left">
+      <div style="font-size:13px;color:var(--text2);line-height:2">
+        <div style="display:flex;align-items:center;gap:8px"><span style="color:#f59e0b;font-weight:700">✓</span> Sessioni illimitate al giorno</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="color:#f59e0b;font-weight:700">✓</span> Posizioni multiple contemporaneamente</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="color:#f59e0b;font-weight:700">✓</span> Filtri personalizzabili (Trend 1h, BTC EMA, RSI, TP)</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="color:#f59e0b;font-weight:700">✓</span> Allocazione per trade personalizzabile</div>
+      </div>
+    </div>
+    <button onclick="closeProWelcome()" style="width:100%;padding:14px;background:linear-gradient(135deg,#f59e0b,#ef4444);border:none;border-radius:var(--radius);color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);letter-spacing:-0.01em">Inizia ora →</button>
+  </div>
+</div>
 
 <!-- PAYWALL MODAL -->
 <div class="modal-overlay" id="paywallModal" onclick="if(event.target===this)closePaywall()">
