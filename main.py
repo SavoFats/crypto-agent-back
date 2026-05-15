@@ -2769,6 +2769,21 @@ async def save_revx_keys(req: RevxKeysRequest, request: Request, user_id: int = 
         )
     return {"ok": True}
 
+@app.delete("/auth/revx_keys")
+async def delete_revx_keys(request: Request, user_id: int = Depends(get_current_user)):
+    check_rate_limit(request, max_attempts=5, window=60, key_suffix="revx_delete")
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="DB non disponibile")
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET revx_key_id = '', revx_private_key = '' WHERE id = $1", user_id
+        )
+    state = user_sessions.get(user_id)
+    if state:
+        state["revx_key_id"] = ""
+        state["revx_private_key"] = ""
+    return {"ok": True}
+
 @app.get("/test_revx")
 async def test_revx(request: Request, user_id: int = Depends(get_current_user)):
     check_rate_limit(request, max_attempts=15, window=60, key_suffix="test_revx")

@@ -572,17 +572,33 @@ body.auth-active .tabbar { display:none !important; }
   </div>
 </div>
 
-<!-- Modal Revolut X config — wizard 3 step -->
+<!-- Modal Revolut X config — wizard 3 step / connected view -->
 <div class="modal-overlay" id="revxModal" onclick="if(event.target===this)closeRevxModal()">
   <div class="modal-card" style="max-width:420px;width:100%">
 
     <!-- Header fisso -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <div class="modal-title" style="margin-bottom:0">Collega Revolut X</div>
+      <div class="modal-title" style="margin-bottom:0" id="revxModalTitle">Collega Revolut X</div>
       <button onclick="closeRevxModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
+
+    <!-- Vista collegato -->
+    <div id="revxConnectedView" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px;background:rgba(0,200,100,0.1);border:1px solid rgba(0,200,100,0.3);border-radius:10px;margin-bottom:16px">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00c864" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <span style="font-size:14px;font-weight:600;color:var(--text)">Revolut X collegato</span>
+      </div>
+      <p style="font-size:13px;color:var(--text2);margin:0 0 20px;line-height:1.6">Le chiavi API sono salvate e crittografate. L'agente utilizzerà Revolut X per eseguire gli ordini in modalità reale.</p>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" onclick="closeRevxModal()">Chiudi</button>
+        <button class="modal-btn cancel" style="color:var(--red);border-color:var(--red)" onclick="disconnectRevx()">Scollega</button>
+      </div>
+    </div>
+
+    <!-- Vista wizard -->
+    <div id="revxWizardView">
 
     <!-- Stepper -->
     <div style="display:flex;align-items:center;gap:4px;margin-bottom:20px">
@@ -702,6 +718,8 @@ body.auth-active .tabbar { display:none !important; }
         <button class="modal-btn confirm-real" style="background:var(--blue)" id="revxStep3Btn" onclick="saveRevxKeys()" disabled>Salva e connetti</button>
       </div>
     </div>
+
+    </div><!-- /revxWizardView -->
 
   </div>
 </div>
@@ -1678,7 +1696,26 @@ function showRevxConfig() {
     return;
   }
   document.getElementById('profileMenu').classList.remove('open');
+  const connected = _hasRevxKeys;
+  document.getElementById('revxConnectedView').style.display = connected ? '' : 'none';
+  document.getElementById('revxWizardView').style.display = connected ? 'none' : '';
+  document.getElementById('revxModalTitle').textContent = connected ? 'Revolut X' : 'Collega Revolut X';
   document.getElementById('revxModal').classList.add('open');
+}
+
+async function disconnectRevx() {
+  try {
+    const r = await fetch(API + '/auth/revx_keys', { method: 'DELETE', headers: authHeaders() });
+    if (r.ok) {
+      _hasRevxKeys = false;
+      window._realMode = false;
+      closeRevxModal();
+      updateUI();
+      showToast('Revolut X scollegato');
+    }
+  } catch(e) {
+    showToast('Errore durante la disconnessione', true);
+  }
 }
 
 function showTelegramConfig() {
@@ -1843,7 +1880,11 @@ async function saveRevxKeys() {
     });
     const d = await r.json();
     if (d.ok) {
-      document.getElementById('revxModal').classList.remove('open');
+      _hasRevxKeys = true;
+      document.getElementById('revxConnectedView').style.display = '';
+      document.getElementById('revxWizardView').style.display = 'none';
+      document.getElementById('revxModalTitle').textContent = 'Revolut X';
+      updateUI();
       // Test connessione
       const tr = await fetch(API + '/test_revx', { headers: authHeaders() });
       if (tr.status === 429) {
