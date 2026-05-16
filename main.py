@@ -2681,6 +2681,7 @@ async def start_agent(body: dict, request: Request, user_id: int = Depends(get_c
             "tp2R":                float(cfg.get("tp2R", 4.0)),
             "trailingStop":        bool(cfg.get("trailingStop", True)),
             "maxHoldHours":        float(cfg.get("maxHoldHours", 4.0)),
+            "timeFilter":          bool(cfg.get("timeFilter", True)),
         },
         "cooldowns": {}, "tradeCount": 0, "wins": 0, "trades": [], "log": [],
         "cb_key": cb_key, "cb_secret": cb_secret,
