@@ -2425,7 +2425,7 @@ async def get_status(request: Request, user_id: int = Depends(get_current_user))
         "positions": state["positions"],
         "remainingMs": remaining,
         "pnlHistory": state["pnlHistory"][-100:],
-        "log": state["log"][:40],
+        "log": state.get("log", [])[:40],
     }
 
 @app.get("/market")
