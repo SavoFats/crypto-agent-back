@@ -1257,14 +1257,12 @@ body.auth-active .tabbar { display:none !important; }
         <div class="hero-stat">Win rate <strong id="heroWR">--%</strong></div>
         <div class="hero-stat" id="heroRemainingWrap" style="display:none">Rimanente <strong id="heroRemaining">--</strong></div>
       </div>
+      <button id="stopBtn" onclick="stopAgent()" disabled
+        style="display:none;position:absolute;bottom:14px;right:16px;padding:6px 12px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:20px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);align-items:center;gap:6px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
+        <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><rect width="8" height="8" rx="1.5"/></svg>
+        Ferma
+      </button>
     </div>
-
-    <!-- Stop button -->
-    <button id="stopBtn" onclick="stopAgent()" disabled
-      style="display:none;width:100%;padding:13px;background:rgba(246,70,93,0.08);border:1px solid rgba(246,70,93,0.3);border-radius:var(--radius);color:var(--red);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans);align-items:center;justify-content:center;gap:8px;margin-bottom:12px">
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="1" y="1" width="10" height="10" rx="2"/></svg>
-      Ferma sessione
-    </button>
 
     <!-- Tabs -->
     <div class="mon-tabs">
