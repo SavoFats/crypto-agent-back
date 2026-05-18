@@ -869,20 +869,10 @@ body.auth-active .tabbar { display:none !important; }
       <div style="border-top:1px solid var(--border)"></div>
 
       <div style="display:flex;gap:12px;align-items:flex-start">
-        <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">EXP</div>
+        <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">PULL</div>
         <div>
-          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Espansione Volatilità</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">L'ATR delle ultime 6 candele su 15m è <strong style="color:var(--text)">almeno il 60% della media</strong> delle ultime 20 candele. Esclude crossover in mercati piatti — senza espansione di volatilità il movimento non ha momentum reale.</div>
-        </div>
-      </div>
-
-      <div style="border-top:1px solid var(--border)"></div>
-
-      <div style="display:flex;gap:12px;align-items:flex-start">
-        <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">CROSS</div>
-        <div>
-          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Crossover 15m</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">EMA20 ha appena superato EMA50 su 15m <strong style="color:var(--text)">nelle ultime 6 candele (90 min)</strong>. Cattura il momentum all'inizio del movimento, non dopo che ha già corso. Crossover vecchi vengono scartati.</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Pullback 15m</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">Il prezzo è vicino all'EMA20 su 15m <strong style="color:var(--text)">entro la tolleranza configurata</strong>. Invece di inseguire un breakout già partito, il bot entra durante la correzione verso la media — prezzo migliore, stop più stretto, più upside davanti.</div>
         </div>
       </div>
 
@@ -892,7 +882,7 @@ body.auth-active .tabbar { display:none !important; }
         <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">RSI</div>
         <div>
           <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">RSI</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">RSI(14) in zona neutrale (40–65). Troppo alto = coin già ipercomprata post-crossover. Troppo basso = possibile falso segnale in downtrend.</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">RSI(14) in zona neutrale (40–65). Troppo alto = coin già ipercomprata, poco spazio per salire. Troppo basso = possibile falso segnale in downtrend.</div>
         </div>
       </div>
 
@@ -911,8 +901,8 @@ body.auth-active .tabbar { display:none !important; }
       <div style="display:flex;gap:12px;align-items:flex-start">
         <div style="min-width:38px;height:22px;background:var(--surface3);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0">VOL</div>
         <div>
-          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Volume crossover</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.55">Il volume dell'ultima candela è <strong style="color:var(--text)">sopra la media delle ultime 20 candele</strong>. Un crossover con volume alto conferma che il movimento è reale — bassa partecipazione su un crossover è spesso un falso segnale.</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Volume rimbalzo</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">Il volume dell'ultima candela è <strong style="color:var(--text)">sopra la media delle ultime 20 candele</strong>. Un rimbalzo con volume alto conferma che c'è partecipazione reale — bassa partecipazione sul pullback è spesso un falso segnale.</div>
         </div>
       </div>
 
@@ -3238,7 +3228,7 @@ function renderMarket() {
         ><div class="ema-dot ${on?'on':'off'}"></div><span class="ema-dot-label">${label}</span></div>`;
       };
       const signalDot = ema.signal ? `<div class="ema-dot-wrap" style="margin-left:2px"><div class="ema-dot signal"></div><span class="ema-dot-label" style="color:var(--blue)">IN</span></div>` : '';
-      emaDots = `<div class="ema-dots">${dot(ema.trend1h_ok ?? true,'trend1h','1H')}${dot(ema.trend,'trend','15M')}${dot(ema.crossover ?? false,'crossover','CROSS')}${dot(ema.expand_ok ?? true,'expand','EXP')}${dot(ema.rsi_ok ?? true,'rsi','RSI')}${dot(ema.body_ok ?? true,'body','BODY')}${dot(ema.vol_ok ?? true,'vol','VOL')}${dot(ema.stop,'stop','R')}${signalDot}</div>`;
+      emaDots = `<div class="ema-dots">${dot(ema.trend1h_ok ?? true,'trend1h','1H')}${dot(ema.trend,'trend','15M')}${dot(ema.pullback_ok ?? false,'pullback','PULL')}${dot(ema.rsi_ok ?? true,'rsi','RSI')}${dot(ema.body_ok ?? true,'body','BODY')}${dot(ema.vol_ok ?? true,'vol','VOL')}${dot(ema.stop,'stop','R')}${signalDot}</div>`;
     }
     return `<div class="mkt-row${isOpen?' mkt-row-open':''}">
       <div class="mkt-row-main">
@@ -3625,25 +3615,20 @@ const EMA_DOT_INFO = {
     descOn:  "EMA20 > EMA50 su 15min — mercato in tendenza rialzista sul medio termine.",
     descOff: "EMA20 < EMA50 su 15min — nessuna tendenza rialzista chiara. L'agente aspetta che il trend si formi.",
   },
-  crossover: {
-    name: 'Crossover 15m',
-    descOn:  "EMA20 ha appena superato EMA50 su 15min (nelle ultime 6 candele = 90 min). Segnale di momentum: il trend si sta formando ora.",
-    descOff: "Nessun crossover fresco. O EMA20 è ancora sotto EMA50, oppure il crossover è avvenuto più di 90 min fa. L'ingresso sarebbe tardivo.",
-  },
-  expand: {
-    name: 'Espansione volatilità',
-    descOn:  "ATR delle ultime 6 candele ≥ 60% della media delle ultime 20 — il mercato si sta muovendo con forza. Crossover con momentum reale.",
-    descOff: "ATR recente troppo basso rispetto alla media — mercato piatto. Crossover senza espansione di volatilità è spesso un falso segnale.",
+  pullback: {
+    name: 'Pullback 15m',
+    descOn:  "Il prezzo è nella zona di pullback: vicino all'EMA20 su 15m (entro la tolleranza configurata). Ingresso sulla correzione, non sul breakout già partito.",
+    descOff: "Il prezzo è troppo lontano dall'EMA20 su 15m — o ha già corso troppo sopra (ingresso tardivo) o è sotto la media (trend non confermato).",
   },
   body: {
     name: 'Candela direzionale',
     descOn:  "L'ultima candela è rialzista con corpo ≥ 30% del range (high-low). Conferma la direzionalità del movimento.",
-    descOff: "Candela debole: corpo troppo piccolo o ribassista. Il crossover non è supportato da una candela direzionale chiara.",
+    descOff: "Candela debole: corpo troppo piccolo o ribassista. Il rimbalzo sul pullback non è confermato da una candela direzionale chiara.",
   },
   vol: {
     name: 'Volume',
-    descOn:  "Volume dell'ultima candela sopra la media delle ultime 20 — il crossover ha partecipazione reale.",
-    descOff: "Volume basso sul crossover — il movimento non è sostenuto da partecipazione reale. Rischio di falso segnale.",
+    descOn:  "Volume dell'ultima candela sopra la media delle ultime 20 — il rimbalzo ha partecipazione reale.",
+    descOff: "Volume basso sul rimbalzo — il movimento non è sostenuto da partecipazione reale. Rischio di falso segnale.",
   },
   rsi: {
     name: 'RSI',
@@ -3665,7 +3650,7 @@ function showDotTooltip(el) {
   const info = EMA_DOT_INFO[key];
   if (!info) return;
   // Mappa chiave dot → chiave nel cache ema
-  const keyMap = { trend1h: 'trend1h_ok', trend: 'trend', crossover: 'crossover', expand: 'expand_ok', body: 'body_ok', vol: 'vol_ok', rsi: 'rsi_ok', stop: 'stop' };
+  const keyMap = { trend1h: 'trend1h_ok', trend: 'trend', pullback: 'pullback_ok', body: 'body_ok', vol: 'vol_ok', rsi: 'rsi_ok', stop: 'stop' };
   const on = ema[keyMap[key] ?? key];
   const tip = document.getElementById('emaTooltip');
   const color = on ? 'var(--green)' : 'var(--red)';
