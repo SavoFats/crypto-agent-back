@@ -1504,7 +1504,7 @@ async def scan_and_trade(state: dict, user_id: int = None):
 
     candidates  = []
     ema_skipped = 0
-    block_count = {"trend1h": 0, "cross": 0, "fresh": 0, "rsi": 0, "body": 0, "vol": 0, "expand": 0, "stop": 0}
+    block_count = {"trend1h": 0, "trend15m": 0, "pull": 0, "fresh": 0, "rsi": 0, "body": 0, "vol": 0, "stop": 0}
 
     for d in universe_sorted:
         sym = d["symbol"]
