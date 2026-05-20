@@ -3562,15 +3562,15 @@ function closeDrawer() {
 
 // Swipe down per chiudere il drawer
 (function() {
-  let startY = 0, startScrollTop = 0, dragging = false;
+  let startY = 0, startX = 0, dragging = false;
   const getDrawer = () => document.getElementById('configDrawer');
 
   document.addEventListener('touchstart', e => {
     const drawer = getDrawer();
     if (!drawer || !drawer.classList.contains('open')) return;
-    // Swipe valido solo se il drawer è scrollato in cima
+    if (e.target.closest('input[type=range]')) { dragging = false; return; }
     startY = e.touches[0].clientY;
-    startScrollTop = drawer.scrollTop;
+    startX = e.touches[0].clientX;
     dragging = true;
   }, { passive: true });
 
@@ -3578,9 +3578,9 @@ function closeDrawer() {
     if (!dragging) return;
     const drawer = getDrawer();
     if (!drawer || !drawer.classList.contains('open')) return;
+    const dx = Math.abs(e.touches[0].clientX - startX);
     const dy = e.touches[0].clientY - startY;
-    // Chiudi solo se stiamo swipando verso il basso E il drawer è in cima
-    if (dy > 0 && drawer.scrollTop <= 0) {
+    if (dy > 0 && drawer.scrollTop <= 0 && dy > dx) {
       drawer.style.transform = `translateY(${dy}px)`;
       drawer.style.transition = 'none';
       e.preventDefault();
