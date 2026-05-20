@@ -21,16 +21,18 @@
   } else {
     document.documentElement.style.background='#eef1ff';
   }
-  // Fix iOS PWA viewport: window.innerHeight è corretto anche al primo render,
-  // mentre 100dvh può essere sbagliato in standalone mode.
-  document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
-  // In browser mode (non PWA), env(safe-area-inset-bottom) causa padding extra indesiderato
-  // perché il viewport si ferma già sopra la chrome del browser. Azzeriamo --safe-b;
-  // in standalone mode applyIOSSafeAreaFix() calcola il valore corretto a runtime.
+  // In standalone (PWA): usa screen.height che è sempre l'altezza fisica dello schermo.
+  // window.innerHeight al primo render può essere inferiore allo schermo reale (bug iOS),
+  // causando un layout viewport corto e lasciando area vuota sotto la tabbar.
+  // In browser mode: usa innerHeight (viewport senza chrome del browser).
+  var _initH = window.navigator.standalone ? window.screen.height : window.innerHeight;
+  document.documentElement.style.setProperty('--app-height', _initH + 'px');
+  // In browser mode, env(safe-area-inset-bottom) causa padding extra: il viewport
+  // si ferma già sopra la chrome del browser, quindi non serve il safe area offset.
   if (!window.navigator.standalone) {
     document.documentElement.style.setProperty('--safe-b', '0px');
   }
-  // Aggiorna --app-height se Safari mostra/nasconde la barra degli indirizzi
+  // Aggiorna --app-height al resize (es. Safari nasconde/mostra barra indirizzi)
   window.addEventListener('resize', function() {
     document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
   });
@@ -1672,6 +1674,8 @@ function applyIOSSafeAreaFix() {
 
     // Fallback: se env() è ancora 0 e lo schermo è >= 812pt → iPhone Face ID → 34px
     const finalSafeB = safeB > 0 ? safeB : (window.screen.height >= 812 ? 34 : 0);
+    // Assicura che il body copra l'intero schermo fisico
+    document.documentElement.style.setProperty('--app-height', window.screen.height + 'px');
     if (finalSafeB > 0) {
       document.documentElement.style.setProperty('--safe-b', finalSafeB + 'px');
       tabbar.style.height        = (68 + finalSafeB) + 'px';

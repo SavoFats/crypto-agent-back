@@ -21,9 +21,8 @@
   } else {
     document.documentElement.style.background='#eef1ff';
   }
-  // Fix iOS PWA viewport: window.innerHeight è corretto anche al primo render,
-  // mentre 100dvh può essere sbagliato in standalone mode.
-  document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+  var _initH = window.navigator.standalone ? window.screen.height : window.innerHeight;
+  document.documentElement.style.setProperty('--app-height', _initH + 'px');
   if (!window.navigator.standalone) {
     document.documentElement.style.setProperty('--safe-b', '0px');
   }
@@ -1668,6 +1667,7 @@ function applyIOSSafeAreaFix() {
 
     // Fallback: se env() è ancora 0 e lo schermo è >= 812pt → iPhone Face ID → 34px
     const finalSafeB = safeB > 0 ? safeB : (window.screen.height >= 812 ? 34 : 0);
+    document.documentElement.style.setProperty('--app-height', window.screen.height + 'px');
     if (finalSafeB > 0) {
       document.documentElement.style.setProperty('--safe-b', finalSafeB + 'px');
       tabbar.style.height        = (68 + finalSafeB) + 'px';
